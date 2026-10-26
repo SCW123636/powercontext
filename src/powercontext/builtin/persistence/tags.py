@@ -24,7 +24,7 @@ import secrets
 from collections.abc import Callable
 from datetime import UTC, datetime
 from hashlib import sha256
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 import rfc8785
 from sqlalchemy import ColumnElement, and_, delete, func, insert, literal, select, tuple_, update
@@ -81,7 +81,7 @@ def tag_predicate(
     return count == len(tag_filter.keys) if tag_filter.match == "all" else count > 0
 
 
-def memory_tag_sql(alias: Literal["f", "m"]) -> str:
+def memory_tag_sql(alias: str) -> str:
     """A parameterized predicate for native FTS/vector SQL (aliases are internal)."""
 
     return """
