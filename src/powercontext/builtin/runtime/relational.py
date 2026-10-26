@@ -152,6 +152,7 @@ from powercontext.builtin.persistence.recurrence import RecurrenceRepository
 from powercontext.builtin.persistence.skill_packages import SkillPackageRepository
 from powercontext.builtin.persistence.skill_publications import SkillPublicationRepository
 from powercontext.builtin.persistence.source_definitions import SourceDefinitionManifestRepository
+from powercontext.builtin.persistence.source_lifecycle import SourceLifecycleRepository
 from powercontext.builtin.persistence.sources import SourceRepository, StoredSource
 from powercontext.builtin.persistence.statistics import StatisticsRepository
 from powercontext.builtin.persistence.supervision import (
@@ -190,6 +191,7 @@ from powercontext.builtin.runtime.protocols import (
 )
 from powercontext.builtin.runtime.recall import RelationalRecallTokenEstimator
 from powercontext.builtin.runtime.recurrence import RelationalRecurrenceLedger
+from powercontext.builtin.runtime.source_lifecycle import SourceLifecycleService
 from powercontext.builtin.runtime.statistics import RelationalScopedStatistics
 from powercontext.builtin.scope import ScopeApplication
 from powercontext.builtin.scope.subject_sources import SubjectSourceService
@@ -936,6 +938,21 @@ class RelationalContexts:
             except RepositoryNotFoundError as error:
                 raise ArtifactNotFoundError(artifact_ref) from error
 
+    def source_lifecycle(self, scope_id: str, /) -> SourceLifecycleService:
+        """Return the Source dependency service bound to one scope."""
+
+        services = self._services_for(validate_scope_id(scope_id))
+        _, catalog = services.sources()
+        return SourceLifecycleService(
+            database=self.database,
+            scope_id=services.scope_id,
+            nodes=SourceLifecycleRepository(),
+            sources=self.repositories.sources,
+            topics=self.repositories.topic_memories,
+            memory=lambda: services.memory(catalog),
+            memory_artifact_id=self._memory_artifact_id,
+        )
+
     async def request_topic_memory_flush(self, scope_id: str, /) -> bool:
         """Persist one flush generation and return only after its transaction commits."""
 
@@ -991,7 +1008,7 @@ class RelationalContexts:
             embedding_profile = query_embedding.embedding_profile
         scope = validate_scope_id(scope_id)
         async with self.database.transaction() as connection:
-            return await self.repositories.topic_memories.search(
+            result = await self.repositories.topic_memories.search(
                 connection,
                 scope,
                 query,
@@ -1001,6 +1018,14 @@ class RelationalContexts:
                 embedding_profile=embedding_profile,
                 admission=admission,
             )
+            hidden = await SourceLifecycleRepository().unavailable_topic_artifact_ids(connection, scope)
+        if hidden:
+            # Lifecycle withdrawal only removes retrieval eligibility; the exact
+            # Revision and its publication stay readable through get_topic_memory.
+            hits = tuple(hit for hit in result.hits if hit.artifact_ref.artifact_id not in hidden)
+            if len(hits) != len(result.hits):
+                result = result.model_copy(update={"hits": hits})
+        return result
 
     async def search_skills(
         self,

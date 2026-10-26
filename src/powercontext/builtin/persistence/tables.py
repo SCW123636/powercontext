@@ -1090,6 +1090,33 @@ RECEIPT_MIGRATION_REVIEW_TABLE = Table(
     Column("reason", String(64), nullable=False),
 )
 
+# One registered node per (scope, caller-supplied node id). The reference is
+# canonical JSON so SourceRef, MemoryCitation, and ArtifactRef keep their exact
+# registration binding. ``available`` is the propagated lifecycle state; the
+# source_* columns hold the last accepted Source event for replay validation.
+SOURCE_LIFECYCLE_NODES_TABLE = Table(
+    "pc_source_lifecycle_nodes",
+    SHARED_METADATA,
+    Column("scope_id", identity_string(MAX_SCOPE_ID_LENGTH), primary_key=True),
+    Column("node_id", identity_string(MAX_SOURCE_ID_LENGTH), primary_key=True),
+    Column("kind", String(16), nullable=False),
+    Column("policy", String(8)),
+    Column("parents", _entry_text_type(), nullable=False),
+    Column("reference", _entry_text_type(), nullable=False),
+    Column("available", Boolean, nullable=False),
+    Column("source_revision", Integer),
+    Column("source_sequence", Integer, nullable=False),
+    Column("source_reason", String(1024)),
+    Column("registration_order", Integer, nullable=False),
+    Column("artifact_id", identity_string(MAX_ARTIFACT_ID_LENGTH)),
+    ForeignKeyConstraint(("scope_id",), ("pc_scopes.scope_id",), ondelete="CASCADE"),
+    Index("ix_pc_source_lifecycle_scope_kind", "scope_id", "kind", "artifact_id"),
+    CheckConstraint("kind IN ('source', 'memory', 'topic')", name="ck_pc_source_lifecycle_kind"),
+    CheckConstraint("policy IS NULL OR policy IN ('all', 'any')", name="ck_pc_source_lifecycle_policy"),
+    CheckConstraint("source_sequence >= 0", name="ck_pc_source_lifecycle_sequence_nonnegative"),
+    CheckConstraint("registration_order > 0", name="ck_pc_source_lifecycle_order_positive"),
+)
+
 # The recurrence ledger is append-only: every correction is a new row, and the
 # only write path is the existing task-outcome incubation window.
 RECURRENCE_MATCH_TABLE = Table(
@@ -1187,5 +1214,5 @@ BUILTIN_TABLES = (
     + MEMORY_TABLES
     + STATISTICS_TABLES
     + RECURRENCE_TABLES
-    + (ARTIFACT_TAGS_TABLE, DREAM_RUNS_TABLE, RECEIPT_MIGRATION_REVIEW_TABLE)
+    + (ARTIFACT_TAGS_TABLE, DREAM_RUNS_TABLE, RECEIPT_MIGRATION_REVIEW_TABLE, SOURCE_LIFECYCLE_NODES_TABLE)
 )
