@@ -105,10 +105,18 @@ _CHANGE_TERMS = frozenset(
 )
 
 _K1 = 1.2
-_B = 0.75
+_B = 0.35
 _BIGRAM_WEIGHT = 0.35
 _SECTION_WEIGHT = 1.5
 _STATEMENT_WEIGHT = 2.0
+
+# A page from a filing the question does not point at keeps at most this share of
+# its own lexical score, so identity has to be proven rather than assumed.
+_OTHER_DOC_WEIGHT = 0.2
+_AFFINITY_POWER = 2.0
+
+_NON_ALNUM = re.compile(r"[^a-z0-9]")
+_LEADING_NAME = re.compile(r"[a-z]{4,}")
 
 
 def _reject_blank(value: str, field: str) -> str:
@@ -303,6 +311,8 @@ def _singular(token: str) -> str:
         return token
     if token.endswith("ies") and len(token) > 4:
         return f"{token[:-3]}y"
+    if token.endswith("ity") and len(token) > 6:
+        return token[:-3]
     if token.endswith("es") and len(token) > 4 and token[:-2].endswith(("s", "x", "z", "ch", "sh")):
         return token[:-2]
     if token.endswith("s") and not token.endswith(("ss", "us", "is")):
@@ -332,15 +342,70 @@ def _query(question: str) -> tuple[dict[str, float], list[str]]:
 
 
 class _Page:
-    __slots__ = ("citation", "counts", "length", "bigrams", "title_head")
+    __slots__ = ("citation", "counts", "document_id", "length", "bigrams", "title_head")
 
     def __init__(self, citation: Any, text: str) -> None:
-        tokens = _tokens(text)
+        document_id, _, body = text.partition("\n")
+        tokens = _tokens(body)
         self.citation = citation
+        self.document_id = document_id.strip()
         self.counts = Counter(tokens)
         self.length = max(len(tokens), 1)
         self.bigrams = frozenset(zip(tokens, tokens[1:], strict=False))
-        self.title_head = text[:3200].casefold()
+        self.title_head = body[:3200].casefold()
+
+
+def _identity_of(document_id: str) -> str:
+    """Return the leading name part of a document id, if it is long enough to name."""
+
+    match = _LEADING_NAME.match(document_id.casefold())
+    return match.group() if match is not None else ""
+
+
+def _named_filings(documents: dict[str, list[_Page]], question: str) -> set[str]:
+    """Return the filings named in the question, judged by the leading part of the id."""
+
+    squashed = _NON_ALNUM.sub("", question.casefold())
+    return {
+        name for name in documents if (identity := _identity_of(name)) and identity in squashed
+    }
+
+
+def _document_affinity(
+    documents: dict[str, list[_Page]], question: str, weights: dict[str, float]
+) -> dict[str, float]:
+    """Return the share of its own lexical score each filing keeps.
+
+    When the question names one filing, the others keep nothing: a page about another
+    company is never evidence, however well its words match. When the question names
+    no filing, a term that fills most pages of one filing and hardly appears in the
+    others still points at it, and that reading is bounded below by
+    ``_OTHER_DOC_WEIGHT`` because the guess is fallible.
+    """
+
+    if len(documents) < 2:
+        return {name: 1.0 for name in documents}
+    named = _named_filings(documents, question)
+    spread: dict[str, float] = {name: 0.0 for name in documents}
+    for term, weight in weights.items():
+        coverage = {
+            name: sum(1 for item in pages if term in item.counts) / len(pages)
+            for name, pages in documents.items()
+        }
+        mean = sum(coverage.values()) / len(coverage)
+        for name, value in coverage.items():
+            if value > mean:
+                spread[name] += weight * (value - mean)
+    best = max(spread.values(), default=0.0)
+    if best == 0.0:
+        return {name: 1.0 if name in named else 0.0 for name in documents}
+    floor = 0.0 if named else _OTHER_DOC_WEIGHT
+    return {
+        name: 1.0
+        if name in named
+        else floor + (1.0 - floor) * (spread[name] / best) ** _AFFINITY_POWER
+        for name in documents
+    }
 
 
 async def search_pdf_pages(
@@ -402,6 +467,18 @@ async def search_pdf_pages(
         return tuple(list(citations.values())[:limit])
 
     pages = {key: _Page(citations[key], text) for key, text in texts.items()}
+    documents: dict[str, list[_Page]] = {}
+    for item in pages.values():
+        documents.setdefault(item.document_id, []).append(item)
+    owner = _named_filings(documents, question)
+    if len(owner) == 1:
+        # Rank inside the named filing only, so its own page lengths and term
+        # frequencies set the scale instead of being averaged against every other
+        # filing that happens to share the pool.
+        only = next(iter(owner))
+        pages = {key: item for key, item in pages.items() if item.document_id == only}
+        documents = {only: documents[only]}
+    affinity = _document_affinity(documents, question, weights)
     total = len(pages)
     average = sum(item.length for item in pages.values()) / total
     document_frequency = {
@@ -435,6 +512,8 @@ async def search_pdf_pages(
     if best > 0.0:
         for key, item in pages.items():
             scores[key] += _section_bonus(item.title_head, weights, best)
+    for key, item in pages.items():
+        scores[key] *= affinity.get(item.document_id, 1.0)
     ordered = sorted(scores, key=lambda key: (-scores[key], key))[:limit]
     return tuple(citations[key] for key in ordered)
 
