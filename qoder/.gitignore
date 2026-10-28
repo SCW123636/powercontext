@@ -1,0 +1,4 @@
+.venv/
+.lapcoach/
+__pycache__/
+*.pyc
