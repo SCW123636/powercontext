@@ -1,0 +1,5 @@
+$ /home/lenovo2/mmtest/bin/python -m pytest tests/test_priority_filter.py tests/test_csv_priority.py -q
+exit=0
+
+.........                                                                [100%]
+9 passed in 0.28s

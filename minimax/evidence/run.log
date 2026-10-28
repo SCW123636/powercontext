@@ -1,0 +1,20 @@
+[1/6] 组装开发上下文
+      规格 4 / 代码 5 / 测试 6；文件 ['fleetdesk/importer.py', 'fleetdesk/cli.py', 'fleetdesk/service.py', 'fleetdesk/__init__.py']
+[2/6] 基线测试（修改前）
+      目标测试 exit=1，回归测试 exit=0
+[3/6] MiniMax 第 1 轮
+      request_id=07312c5051d3ec63d82eda4ea3df21c9 usage=2917 tokens，5.326s，finish=stop
+      改动文件：为工单服务增加大小写归一化的优先级过滤，并让 CSV 导入在缺少优先级列或单元格为空时使用 P2、对非法优先级报告具体行号。
+      测试：目标 exit=1，回归 exit=0
+[3/6] MiniMax 第 2 轮
+      request_id=07312c57968730fefa9c4f50c425c64f usage=4747 tokens，4.378s，finish=stop
+      改动文件：修正 CSV 优先级导入：显式校验并归一化优先级、非法值报告文件行号且保留 InvalidPriority 类型，同时完成服务层优先级过滤。
+      测试：目标 exit=1，回归 exit=0
+[3/6] MiniMax 第 3 轮
+      request_id=07312c5ea429fae93bea04c7cae45352 usage=6592 tokens，3.876s，finish=stop
+      改动文件：修正 CSV 非法优先级异常：在保留行号消息的同时通过 InvalidPriority.line 暴露出错行号，并维持优先级归一化与默认 P2 行为。
+      测试：目标 exit=0，回归 exit=0
+[4/6] 生成差异与快照
+[5/6] 写回 PowerContext 任务状态
+[6/6] 会话记录：/mnt/d/项目/数据库大赛/OceanBase2026/wt-ecosystem/minimax/evidence/minimax/session-20261028T133152Z.json
+结果：目标测试 exit=0，回归测试 exit=0

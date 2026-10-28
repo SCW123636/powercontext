@@ -1,0 +1,34 @@
+{
+  "database": "sdd",
+  "table": "documents",
+  "counts": {
+    "spec": 6,
+    "code": 17,
+    "test": 16
+  },
+  "total": 39,
+  "ddl": "CREATE TABLE `documents` (\n  `id` varchar(256) NOT NULL,\n  `kind` varchar(16) NOT NULL,\n  `path` varchar(256) NOT NULL,\n  `anchor` varchar(128) NOT NULL DEFAULT '',\n  `symbol` varchar(128) NOT NULL DEFAULT '',\n  `body` text NOT NULL,\n  `revision` int(11) NOT NULL DEFAULT '1',\n  `updated_at` varchar(32) NOT NULL DEFAULT '',\n  PRIMARY KEY (`id`),\n  FULLTEXT KEY `ft_body` (`body`) WITH PARSER ngram PARSER_PROPERTIES=(ngram_token_size=2) BLOCK_SIZE 16384\n) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' BLOCK_SIZE = 16384 TABLET_SIZE = 134217728 PCTFREE = 0",
+  "query": "优先级过滤 CSV 导入 行号",
+  "hits": [
+    {
+      "id": "spec:specs/work-orders.md#SPEC-4.1",
+      "score": 1.2284
+    },
+    {
+      "id": "spec:specs/work-orders.md#SPEC-3.1",
+      "score": 1.0465
+    },
+    {
+      "id": "test:tests/test_priority_filter.py::test_filter_by_priority",
+      "score": 0.8307
+    },
+    {
+      "id": "spec:specs/work-orders.md#SPEC-3.2",
+      "score": 0.8143
+    },
+    {
+      "id": "test:tests/test_priority_filter.py::test_none_priority_keeps_full_list",
+      "score": 0.811
+    }
+  ]
+}

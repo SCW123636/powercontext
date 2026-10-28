@@ -1,0 +1,196 @@
+{
+  "task": "为工单列表增加优先级过滤（list_orders），并让 CSV 导入（load_csv）对缺失或非法优先级有明确行为",
+  "specs": [
+    {
+      "citation": "specs/work-orders.md#SPEC-4.1",
+      "path": "specs/work-orders.md",
+      "anchor": "SPEC-4.1",
+      "symbol": "",
+      "revision": 1,
+      "score": 30.9181,
+      "match": "fulltext",
+      "snippet": "## SPEC-4.1 CSV 导入\n\n`fleetdesk.importer.load_csv(path)` 读取工单 CSV：\n\n- 必需列：`id`、`vehicle`、`status`、`opened_on`；缺列时抛 `MissingColumnError`；\n- `priority` 列可以缺失：整列缺失时所有工单按默认优先级 `P2` 导入；\n- `priority` 单元格为空时同样按 `P2` 处理；\n- 非法优先级按 SPEC-3.1 抛 `InvalidPriority`，并带上 CSV 行号；\n- 合法优先级统一存为大写。\n\n修订：1"
+    },
+    {
+      "citation": "specs/work-orders.md#SPEC-3.2",
+      "path": "specs/work-orders.md",
+      "anchor": "SPEC-3.2",
+      "symbol": "",
+      "revision": 1,
+      "score": 26.2,
+      "match": "fulltext",
+      "snippet": "## SPEC-3.2 按优先级过滤工单\n\n`WorkOrderService.list_orders` 增加可选参数 `priority`：\n\n- `priority=None` 时行为与 SPEC-2.1 完全一致；\n- 给定 `priority` 时只返回该优先级的工单；\n- `status` 与 `priority` 同时给出时取交集；\n- 传入手工构造的非法优先级（例如 `\"P9\"`）时必须抛 `InvalidPriority`，不允许静默返回空列表；\n- 传入小写（例如 `\"p1\"`）时按 SPEC-3.1 归一化后比较。\n\n修订：1"
+    },
+    {
+      "citation": "specs/work-orders.md#SPEC-2.1",
+      "path": "specs/work-orders.md",
+      "anchor": "SPEC-2.1",
+      "symbol": "",
+      "revision": 1,
+      "score": 15.7461,
+      "match": "fulltext",
+      "snippet": "## SPEC-2.1 列出工单\n\n`WorkOrderService.list_orders(status=None)` 返回工单列表：\n\n- `status=None` 时返回全部工单，保持导入顺序；\n- `status` 给定时只返回状态完全相等的工单，状态取值仅限 `open`、`in_progress`、`done`。\n\n修订：1"
+    },
+    {
+      "citation": "specs/work-orders.md#SPEC-3.1",
+      "path": "specs/work-orders.md",
+      "anchor": "SPEC-3.1",
+      "symbol": "",
+      "revision": 1,
+      "score": 12.6776,
+      "match": "fulltext",
+      "snippet": "## SPEC-3.1 优先级取值\n\n- 工单优先级只有四个取值：`P0`、`P1`、`P2`、`P3`，其中 `P0` 最高。\n- 任何来源的优先级都必须归一化为大写后再存储与比较；`p1`、` p1 ` 等同于 `P1`。\n- 出现四个取值以外的优先级（例如 `P9`、`high`、空串）时，必须抛出 `fleetdesk.models.InvalidPriority`。\n- 异常消息里要带上出错位置；来自 CSV 时必须包含该行在文件中的行号（表头是第 1 行）。\n\n修订：1"
+    }
+  ],
+  "code": [
+    {
+      "citation": "fleetdesk/importer.py::load_csv",
+      "path": "fleetdesk/importer.py",
+      "anchor": "",
+      "symbol": "load_csv",
+      "revision": 1,
+      "score": 51.2608,
+      "match": "fulltext",
+      "snippet": "# 模块说明：工单 CSV 导入。\n\ndef load_csv(path: str | Path) -> list[WorkOrder]:\n    path = Path(path)\n    with path.open(newline=\"\", encoding=\"utf-8\") as handle:\n        reader = csv.DictReader(handle)\n        fields = reader.fieldnames or []\n        for column in REQUIRED_COLUMNS:\n            if column not in fields:\n                raise MissingColumnError(column, path)\n        orders = []\n        for row in reader:\n            orders.append(\n                WorkOrder(\n                    id=row[\"id\"].strip(),\n                    vehicle=row[\"vehicle\"].strip(),\n                    status=row[\"status\"].strip().lower(),\n                    priority=(row.get(\"priority\") or \"\").strip(),\n                    opened_on=row[\"opened_on\"].strip(),\n                    note=(row.get(\"note\") or \"\").strip(),\n                )\n            )\n    return orders"
+    },
+    {
+      "citation": "fleetdesk/cli.py::main",
+      "path": "fleetdesk/cli.py",
+      "anchor": "",
+      "symbol": "main",
+      "revision": 1,
+      "score": 50.7582,
+      "match": "fulltext",
+      "snippet": "# 模块说明：命令行入口：fleetdesk list / counts。\n\ndef main(argv: list[str] | None = None) -> int:\n    args = build_parser().parse_args(argv)\n    service = WorkOrderService(load_csv(args.data))\n    if args.command == \"counts\":\n        for status, count in service.counts_by_status().items():\n            print(f\"{status}\\t{count}\")\n        return 0\n\n    kwargs = {\"status\": args.status}\n    if args.priority:\n        kwargs[\"priority\"] = args.priority\n    for order in service.list_orders(**kwargs):\n        print(f\"{order.id}\\t{order.vehicle}\\t{order.status}\\t{order.priority}\\t{order.opened_on}\")\n    return 0"
+    },
+    {
+      "citation": "fleetdesk/service.py::WorkOrderService",
+      "path": "fleetdesk/service.py",
+      "anchor": "",
+      "symbol": "WorkOrderService",
+      "revision": 1,
+      "score": 46.3121,
+      "match": "fulltext",
+      "snippet": "# 模块说明：工单查询服务。\n\nclass WorkOrderService:\n    def __init__(self, orders: Iterable[WorkOrder]) -> None:\n        self._orders = list(orders)\n\n    @property\n    def orders(self) -> tuple[WorkOrder, ...]:\n        return tuple(self._orders)\n\n    def list_orders(self, status: str | None = None) -> list[WorkOrder]:\n        \"\"\"按状态列出工单；status 为 None 时返回全部。\"\"\"\n        return [o for o in self._orders if status is None or o.status == status]\n\n    def counts_by_status(self) -> dict[str, int]:\n        counts = {status: 0 for status in VALID_STATUS}\n        for order in self._orders:\n            counts[order.status] = counts.get(order.status, 0) + 1\n        return counts\n\n    def open_orders_for(self, vehicle: str) -> list[WorkOrder]:\n        return [o for o in self._orders if o.vehicle == vehicle and o.status != \"done\"]"
+    },
+    {
+      "citation": "fleetdesk/cli.py::build_parser",
+      "path": "fleetdesk/cli.py",
+      "anchor": "",
+      "symbol": "build_parser",
+      "revision": 1,
+      "score": 33.2879,
+      "match": "fulltext",
+      "snippet": "# 模块说明：命令行入口：fleetdesk list / counts。\n\ndef build_parser() -> argparse.ArgumentParser:\n    parser = argparse.ArgumentParser(prog=\"fleetdesk\", description=\"车队维修工单\")\n    parser.add_argument(\"--data\", default=str(DEFAULT_DATA), help=\"工单 CSV 路径\")\n    sub = parser.add_subparsers(dest=\"command\", required=True)\n\n    listing = sub.add_parser(\"list\", help=\"列出工单\")\n    listing.add_argument(\"--status\", choices=[\"open\", \"in_progress\", \"done\"])\n    listing.add_argument(\"--priority\", choices=[\"P0\", \"P1\", \"P2\", \"P3\"])\n\n    sub.add_parser(\"counts\", help=\"按状态统计工单数\")\n    return parser"
+    },
+    {
+      "citation": "fleetdesk/__init__.py::__init__",
+      "path": "fleetdesk/__init__.py",
+      "anchor": "",
+      "symbol": "__init__",
+      "revision": 1,
+      "score": 32.2,
+      "match": "fulltext",
+      "snippet": "\"\"\"FleetDesk：车队维修工单服务（示例业务工程）。\"\"\"\n\nfrom .importer import MissingColumnError, load_csv\nfrom .models import InvalidPriority, Priority, WorkOrder\nfrom .service import WorkOrderService\n\n__all__ = [\n    \"InvalidPriority\",\n    \"MissingColumnError\",\n    \"Priority\",\n    \"WorkOrder\",\n    \"WorkOrderService\",\n    \"load_csv\",\n]\n"
+    }
+  ],
+  "tests": [
+    {
+      "citation": "tests/test_csv_priority.py::test_empty_priority_cell_defaults_to_p2",
+      "path": "tests/test_csv_priority.py",
+      "anchor": "",
+      "symbol": "test_empty_priority_cell_defaults_to_p2",
+      "revision": 1,
+      "score": 56.3944,
+      "match": "fulltext",
+      "snippet": "# 模块说明：目标测试：SPEC-4.1 CSV 导入的优先级缺省与校验。修改前应当失败。\n\ndef test_empty_priority_cell_defaults_to_p2(tmp_path: Path) -> None:\n    rows = tmp_path / \"empty_priority.csv\"\n    rows.write_text(\n        \"id,vehicle,status,priority,opened_on\\nWO-9,京A-1024,open,,2026-10-28\\n\",\n        encoding=\"utf-8\",\n    )\n    assert load_csv(rows)[0].priority == \"P2\""
+    },
+    {
+      "citation": "tests/test_priority_filter.py::test_status_and_priority_intersect",
+      "path": "tests/test_priority_filter.py",
+      "anchor": "",
+      "symbol": "test_status_and_priority_intersect",
+      "revision": 1,
+      "score": 40.8043,
+      "match": "fulltext",
+      "snippet": "# 模块说明：目标测试：SPEC-3.2 按优先级过滤。修改前应当失败。\n\ndef test_status_and_priority_intersect(service: WorkOrderService) -> None:\n    assert [o.id for o in service.list_orders(status=\"open\", priority=\"P1\")] == [\"WO-1006\"]"
+    },
+    {
+      "citation": "tests/test_csv_priority.py::test_invalid_priority_reports_csv_line_number",
+      "path": "tests/test_csv_priority.py",
+      "anchor": "",
+      "symbol": "test_invalid_priority_reports_csv_line_number",
+      "revision": 1,
+      "score": 38.5229,
+      "match": "fulltext",
+      "snippet": "# 模块说明：目标测试：SPEC-4.1 CSV 导入的优先级缺省与校验。修改前应当失败。\n\ndef test_invalid_priority_reports_csv_line_number() -> None:\n    with pytest.raises(InvalidPriority) as excinfo:\n        load_csv(DATA / \"work_orders_bad_priority.csv\")\n    assert excinfo.value.line == 3"
+    },
+    {
+      "citation": "tests/test_regression.py::test_missing_note_column_becomes_empty",
+      "path": "tests/test_regression.py",
+      "anchor": "",
+      "symbol": "test_missing_note_column_becomes_empty",
+      "revision": 1,
+      "score": 38.4937,
+      "match": "fulltext",
+      "snippet": "# 模块说明：回归测试：修改前后都必须通过。\n\ndef test_missing_note_column_becomes_empty(tmp_path: Path) -> None:\n    sparse = tmp_path / \"sparse.csv\"\n    sparse.write_text(\n        \"id,vehicle,status,priority,opened_on\\nWO-9,京A-1024,open,P2,2026-10-28\\n\",\n        encoding=\"utf-8\",\n    )\n    assert load_csv(sparse)[0].note == \"\""
+    },
+    {
+      "citation": "tests/test_priority_filter.py::test_unknown_priority_filter_raises",
+      "path": "tests/test_priority_filter.py",
+      "anchor": "",
+      "symbol": "test_unknown_priority_filter_raises",
+      "revision": 1,
+      "score": 34.5591,
+      "match": "fulltext",
+      "snippet": "# 模块说明：目标测试：SPEC-3.2 按优先级过滤。修改前应当失败。\n\ndef test_unknown_priority_filter_raises(service: WorkOrderService) -> None:\n    with pytest.raises(InvalidPriority):\n        service.list_orders(priority=\"P9\")"
+    },
+    {
+      "citation": "tests/test_csv_priority.py::test_missing_priority_column_defaults_to_p2",
+      "path": "tests/test_csv_priority.py",
+      "anchor": "",
+      "symbol": "test_missing_priority_column_defaults_to_p2",
+      "revision": 1,
+      "score": 33.3778,
+      "match": "fulltext",
+      "snippet": "# 模块说明：目标测试：SPEC-4.1 CSV 导入的优先级缺省与校验。修改前应当失败。\n\ndef test_missing_priority_column_defaults_to_p2() -> None:\n    orders = load_csv(DATA / \"work_orders_no_priority.csv\")\n    assert [o.priority for o in orders] == [\"P2\", \"P2\"]"
+    }
+  ],
+  "state": {
+    "done": [],
+    "todo": [],
+    "verification": []
+  },
+  "files": [
+    {
+      "path": "fleetdesk/importer.py",
+      "content": "\"\"\"工单 CSV 导入。\"\"\"\n\nfrom __future__ import annotations\n\nimport csv\nfrom pathlib import Path\n\nfrom .models import WorkOrder\n\nREQUIRED_COLUMNS = (\"id\", \"vehicle\", \"status\", \"opened_on\")\n\n\nclass MissingColumnError(ValueError):\n    \"\"\"CSV 缺少必需列。\"\"\"\n\n    def __init__(self, column: str, path: Path) -> None:\n        self.column = column\n        self.path = path\n        super().__init__(f\"{path.name} 缺少必需列 {column!r}\")\n\n\ndef load_csv(path: str | Path) -> list[WorkOrder]:\n    path = Path(path)\n    with path.open(newline=\"\", encoding=\"utf-8\") as handle:\n        reader = csv.DictReader(handle)\n        fields = reader.fieldnames or []\n        for column in REQUIRED_COLUMNS:\n            if column not in fields:\n                raise MissingColumnError(column, path)\n        orders = []\n        for row in reader:\n            orders.append(\n                WorkOrder(\n                    id=row[\"id\"].strip(),\n                    vehicle=row[\"vehicle\"].strip(),\n                    status=row[\"status\"].strip().lower(),\n                    priority=(row.get(\"priority\") or \"\").strip(),\n                    opened_on=row[\"opened_on\"].strip(),\n                    note=(row.get(\"note\") or \"\").strip(),\n                )\n            )\n    return orders\n"
+    },
+    {
+      "path": "fleetdesk/cli.py",
+      "content": "\"\"\"命令行入口：fleetdesk list / counts。\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\nimport sys\nfrom pathlib import Path\n\nfrom .importer import load_csv\nfrom .service import WorkOrderService\n\nDEFAULT_DATA = Path(__file__).resolve().parent.parent / \"data\" / \"work_orders.csv\"\n\n\ndef build_parser() -> argparse.ArgumentParser:\n    parser = argparse.ArgumentParser(prog=\"fleetdesk\", description=\"车队维修工单\")\n    parser.add_argument(\"--data\", default=str(DEFAULT_DATA), help=\"工单 CSV 路径\")\n    sub = parser.add_subparsers(dest=\"command\", required=True)\n\n    listing = sub.add_parser(\"list\", help=\"列出工单\")\n    listing.add_argument(\"--status\", choices=[\"open\", \"in_progress\", \"done\"])\n    listing.add_argument(\"--priority\", choices=[\"P0\", \"P1\", \"P2\", \"P3\"])\n\n    sub.add_parser(\"counts\", help=\"按状态统计工单数\")\n    return parser\n\n\ndef main(argv: list[str] | None = None) -> int:\n    args = build_parser().parse_args(argv)\n    service = WorkOrderService(load_csv(args.data))\n    if args.command == \"counts\":\n        for status, count in service.counts_by_status().items():\n            print(f\"{status}\\t{count}\")\n        return 0\n\n    kwargs = {\"status\": args.status}\n    if args.priority:\n        kwargs[\"priority\"] = args.priority\n    for order in service.list_orders(**kwargs):\n        print(f\"{order.id}\\t{order.vehicle}\\t{order.status}\\t{order.priority}\\t{order.opened_on}\")\n    return 0\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n"
+    },
+    {
+      "path": "fleetdesk/service.py",
+      "content": "\"\"\"工单查询服务。\"\"\"\n\nfrom __future__ import annotations\n\nfrom collections.abc import Iterable\n\nfrom .models import WorkOrder\n\nVALID_STATUS = (\"open\", \"in_progress\", \"done\")\n\n\nclass WorkOrderService:\n    def __init__(self, orders: Iterable[WorkOrder]) -> None:\n        self._orders = list(orders)\n\n    @property\n    def orders(self) -> tuple[WorkOrder, ...]:\n        return tuple(self._orders)\n\n    def list_orders(self, status: str | None = None) -> list[WorkOrder]:\n        \"\"\"按状态列出工单；status 为 None 时返回全部。\"\"\"\n        return [o for o in self._orders if status is None or o.status == status]\n\n    def counts_by_status(self) -> dict[str, int]:\n        counts = {status: 0 for status in VALID_STATUS}\n        for order in self._orders:\n            counts[order.status] = counts.get(order.status, 0) + 1\n        return counts\n\n    def open_orders_for(self, vehicle: str) -> list[WorkOrder]:\n        return [o for o in self._orders if o.vehicle == vehicle and o.status != \"done\"]\n"
+    },
+    {
+      "path": "fleetdesk/__init__.py",
+      "content": "\"\"\"FleetDesk：车队维修工单服务（示例业务工程）。\"\"\"\n\nfrom .importer import MissingColumnError, load_csv\nfrom .models import InvalidPriority, Priority, WorkOrder\nfrom .service import WorkOrderService\n\n__all__ = [\n    \"InvalidPriority\",\n    \"MissingColumnError\",\n    \"Priority\",\n    \"WorkOrder\",\n    \"WorkOrderService\",\n    \"load_csv\",\n]\n"
+    }
+  ],
+  "powercontext": {
+    "scope_id": "scp_3dc0maejq0pv751729ebb5nv4d",
+    "entries": [],
+    "prepared_context": {
+      "schema_": "powercontext.prepared-context.v1",
+      "status": "empty",
+      "content": null,
+      "content_bytes": 0
+    }
+  },
+  "database": {
+    "engine": "seekdb (embedded, FULLTEXT ngram)",
+    "documents": 39
+  }
+}

@@ -67,6 +67,24 @@ def _cmd_state(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_inspect(args: argparse.Namespace) -> int:
+    with Store() as store:
+        report = {
+            "database": config.DB_NAME,
+            "table": config.TABLE,
+            "counts": {kind: store.count(kind) for kind in ("spec", "code", "test")},
+            "total": store.count(),
+            "ddl": store.show_create(),
+            "query": args.query,
+            "hits": [
+                {"id": hit["id"], "score": round(hit["score"], 4)}
+                for hit in store.search_fulltext(args.query, None, 5)
+            ],
+        }
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_reset(args: argparse.Namespace) -> int:
     home = config.home_dir()
     if home.exists():
@@ -93,6 +111,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_state.add_argument("--todo", action="append", default=[], help="待办事项，可重复")
     p_state.add_argument("--verify", action="append", default=[], help="验证结果，可重复")
     p_state.set_defaults(func=_cmd_state)
+
+    p_inspect = sub.add_parser("inspect", help="查看 seekdb 索引内容与一次全文检索")
+    p_inspect.add_argument("--query", default="优先级过滤", help="用于演示的检索语句")
+    p_inspect.set_defaults(func=_cmd_inspect)
 
     p_reset = sub.add_parser("reset", help="清空 seekdb 与 PowerContext 本地数据")
     p_reset.set_defaults(func=_cmd_reset)

@@ -5,9 +5,11 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from .models import WorkOrder
+from .models import InvalidPriority, WorkOrder
 
 REQUIRED_COLUMNS = ("id", "vehicle", "status", "opened_on")
+DEFAULT_PRIORITY = "P2"
+VALID_PRIORITIES = ("P0", "P1", "P2", "P3")
 
 
 class MissingColumnError(ValueError):
@@ -27,14 +29,24 @@ def load_csv(path: str | Path) -> list[WorkOrder]:
         for column in REQUIRED_COLUMNS:
             if column not in fields:
                 raise MissingColumnError(column, path)
+
         orders = []
-        for row in reader:
+        for line_number, row in enumerate(reader, start=2):
+            raw_priority = (row.get("priority") or "").strip()
+            priority = raw_priority.upper() or DEFAULT_PRIORITY
+            if priority not in VALID_PRIORITIES:
+                error = InvalidPriority(
+                    f"{path.name} 第 {line_number} 行优先级非法：{raw_priority!r}"
+                )
+                error.line = line_number
+                raise error
+
             orders.append(
                 WorkOrder(
                     id=row["id"].strip(),
                     vehicle=row["vehicle"].strip(),
                     status=row["status"].strip().lower(),
-                    priority=(row.get("priority") or "").strip(),
+                    priority=priority,
                     opened_on=row["opened_on"].strip(),
                     note=(row.get("note") or "").strip(),
                 )

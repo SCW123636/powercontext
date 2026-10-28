@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 from pathlib import Path
 
 import pylibseekdb as seekdb
@@ -29,8 +30,19 @@ def _open_instance(db_dir: Path) -> None:
         if key in _opened:
             return
         db_dir.mkdir(parents=True, exist_ok=True)
-        seekdb.open(db_dir=key)
-        _opened.add(key)
+        last_error = None
+        for attempt in range(6):
+            try:
+                seekdb.open(db_dir=key)
+                _opened.add(key)
+                return
+            except Exception as exc:  # noqa: BLE001 - 上一个进程尚未完全释放时重试
+                last_error = exc
+                if "initialized twice" in str(exc):
+                    _opened.add(key)
+                    return
+                time.sleep(0.5 * (attempt + 1))
+        raise RuntimeError(f"seekdb 打不开 {key}: {last_error}")
 
 
 ASCII_TOKEN = re.compile(r"[a-z][a-z0-9_]{1,}")
@@ -128,6 +140,9 @@ class Store:
     def count(self, kind: str | None = None) -> int:
         where = f" WHERE kind = {sql_literal(kind)}" if kind else ""
         return self._execute(f"SELECT COUNT(*) FROM {config.TABLE}{where}")[0][0]
+
+    def show_create(self) -> str:
+        return self._execute(f"SHOW CREATE TABLE {config.TABLE}")[0][1]
 
     def search_fulltext(self, query: str, kind: str | None = None, limit: int = 8) -> list[dict]:
         where = [f"MATCH(body) AGAINST({sql_literal(query)})"]

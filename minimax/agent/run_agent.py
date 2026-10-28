@@ -51,8 +51,14 @@ def now_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+RUN_LOG = None
+
+
 def log(message: str) -> None:
     print(message, flush=True)
+    if RUN_LOG is not None:
+        with RUN_LOG.open("a", encoding="utf-8") as handle:
+            handle.write(message + "\n")
 
 
 async def gather_context(task: str) -> dict:
@@ -83,8 +89,10 @@ def render_prompt(context: dict) -> str:
     return "\n".join(parts)
 
 
-def call_minimax(messages: list[dict], api_key: str, max_tokens: int = 8000) -> dict:
+def call_minimax(messages: list[dict], api_key: str, max_tokens: int = 16000) -> dict:
     payload = {"model": MODEL, "messages": messages, "max_tokens": max_tokens, "temperature": 0.2}
+    if os.environ.get("MINIMAX_THINKING", "disabled") != "auto":
+        payload["thinking"] = {"type": "disabled"}
     started = time.monotonic()
     with httpx.Client(timeout=300) as client:
         response = client.post(
@@ -97,8 +105,10 @@ def call_minimax(messages: list[dict], api_key: str, max_tokens: int = 8000) -> 
     body = response.json()
     if body.get("base_resp", {}).get("status_code") not in (0, None):
         raise RuntimeError(f"MiniMax 返回错误：{body['base_resp']}")
-    content = (body.get("choices") or [{}])[0].get("message", {}).get("content", "")
+    choice = (body.get("choices") or [{}])[0]
+    content = choice.get("message", {}).get("content", "")
     return {
+        "finish_reason": choice.get("finish_reason", ""),
         "request": payload,
         "response": body,
         "content": content,
@@ -116,7 +126,11 @@ def parse_files(content: str) -> tuple[dict, list[dict]]:
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end == -1:
         raise ValueError("模型输出里没有 JSON 对象")
-    data = json.loads(text[start : end + 1])
+    fragment = text[start : end + 1]
+    try:
+        data = json.loads(fragment)
+    except json.JSONDecodeError:
+        data = json.loads(fragment, strict=False)
     files = data.get("files") or []
     if not files:
         raise ValueError("模型没有返回任何文件改动")
@@ -192,14 +206,17 @@ def write_diff(files: list[str], evidence_dir: Path, before_root: Path) -> str:
     return text
 
 
-def feedback_message(result: dict) -> str:
+def feedback_message(result: dict, context: dict) -> str:
     output = result["output"]
     if len(output) > 4000:
         output = output[:2000] + "\n...[截断]...\n" + output[-2000:]
+    specs = "\n\n".join(
+        f"{item['anchor']}（{item['citation']}）：\n{item['snippet']}" for item in context["specs"]
+    )
     return (
-        "上一版改动没有通过测试。以下是 pytest 输出，请修正后输出完整的改动文件 JSON"
+        "上一版改动没有通过测试。请对照规格逐条核对，修正后输出完整的改动文件 JSON"
         "（仍然是 {\"summary\", \"files\"} 结构，files 里给改动后的完整内容）：\n\n"
-        f"```\n{output}\n```"
+        f"```\n{output}\n```\n\n# 适用规格\n{specs}"
     )
 
 
@@ -234,6 +251,8 @@ def main(argv: list[str] | None = None) -> int:
     evidence_dir = Path(args.evidence)
     evidence_dir.mkdir(parents=True, exist_ok=True)
     stamp = now_stamp()
+    globals()["RUN_LOG"] = evidence_dir / "run.log"
+    RUN_LOG.write_text("", encoding="utf-8")
 
     log("[1/6] 组装开发上下文")
     context = asyncio.run(gather_context(args.task))
@@ -246,6 +265,12 @@ def main(argv: list[str] | None = None) -> int:
     before = run_pytest(TARGET_TESTS, evidence_dir / "tests" / "before-target.log", "target-before")
     before_reg = run_pytest(REGRESSION_TESTS, evidence_dir / "tests" / "before-regression.log", "regression-before")
     log(f"      目标测试 exit={before['exit_code']}，回归测试 exit={before_reg['exit_code']}")
+
+    session_path = evidence_dir / "minimax" / f"session-{stamp}.json"
+
+    def save_session() -> None:
+        session_path.parent.mkdir(parents=True, exist_ok=True)
+        session_path.write_text(json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
 
     session = {
         "started_at": stamp,
@@ -296,11 +321,13 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 parsed, files = parse_files(call["content"])
             except (ValueError, json.JSONDecodeError) as exc:
-                session["rounds"].append({**call, "error": str(exc)})
-                log(f"      解析失败：{exc}")
+                session["rounds"].append({"round": round_no, **call, "error": str(exc)})
+                save_session()
+                log(f"      解析失败：{exc}（finish={call['finish_reason']}, {len(call['content'])} chars）")
                 return 3
-            session["rounds"].append({**call, "parsed": parsed})
-            log(f"      request_id={call['request_id']} usage={call['usage'].get('total_tokens')} tokens，{call['latency_s']}s")
+            session["rounds"].append({"round": round_no, **call, "parsed": parsed})
+            save_session()
+            log(f"      request_id={call['request_id']} usage={call['usage'].get('total_tokens')} tokens，{call['latency_s']}s，finish={call['finish_reason']}")
             log(f"      改动文件：{parsed.get('summary', '')}")
 
             changed = apply_files(files, evidence_dir)
@@ -310,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
             if target["exit_code"] == 0 and regression["exit_code"] == 0:
                 break
             if round_no < args.rounds:
-                messages.append({"role": "user", "content": feedback_message(target)})
+                messages.append({"role": "user", "content": feedback_message(target, context)})
 
     log("[4/6] 生成差异与快照")
     diff = write_diff(changed, evidence_dir, evidence_dir / "snapshots" / "before")
@@ -337,9 +364,7 @@ def main(argv: list[str] | None = None) -> int:
             "diff": diff,
         }
     )
-    session_path = evidence_dir / "minimax" / f"session-{stamp}.json"
-    session_path.parent.mkdir(parents=True, exist_ok=True)
-    session_path.write_text(json.dumps(session, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_session()
     log(f"[6/6] 会话记录：{session_path}")
 
     ok = target["exit_code"] == 0 and regression["exit_code"] == 0

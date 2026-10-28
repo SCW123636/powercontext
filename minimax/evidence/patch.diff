@@ -1,0 +1,88 @@
+--- a/fleetdesk/importer.py
++++ b/fleetdesk/importer.py
+@@ -5,9 +5,11 @@
+ import csv
+ from pathlib import Path
+ 
+-from .models import WorkOrder
++from .models import InvalidPriority, WorkOrder
+ 
+ REQUIRED_COLUMNS = ("id", "vehicle", "status", "opened_on")
++DEFAULT_PRIORITY = "P2"
++VALID_PRIORITIES = ("P0", "P1", "P2", "P3")
+ 
+ 
+ class MissingColumnError(ValueError):
+@@ -27,14 +29,24 @@
+         for column in REQUIRED_COLUMNS:
+             if column not in fields:
+                 raise MissingColumnError(column, path)
++
+         orders = []
+-        for row in reader:
++        for line_number, row in enumerate(reader, start=2):
++            raw_priority = (row.get("priority") or "").strip()
++            priority = raw_priority.upper() or DEFAULT_PRIORITY
++            if priority not in VALID_PRIORITIES:
++                error = InvalidPriority(
++                    f"{path.name} 第 {line_number} 行优先级非法：{raw_priority!r}"
++                )
++                error.line = line_number
++                raise error
++
+             orders.append(
+                 WorkOrder(
+                     id=row["id"].strip(),
+                     vehicle=row["vehicle"].strip(),
+                     status=row["status"].strip().lower(),
+-                    priority=(row.get("priority") or "").strip(),
++                    priority=priority,
+                     opened_on=row["opened_on"].strip(),
+                     note=(row.get("note") or "").strip(),
+                 )
+--- a/fleetdesk/service.py
++++ b/fleetdesk/service.py
+@@ -4,9 +4,10 @@
+ 
+ from collections.abc import Iterable
+ 
+-from .models import WorkOrder
++from .models import InvalidPriority, WorkOrder
+ 
+ VALID_STATUS = ("open", "in_progress", "done")
++VALID_PRIORITIES = ("P0", "P1", "P2", "P3")
+ 
+ 
+ class WorkOrderService:
+@@ -17,9 +18,28 @@
+     def orders(self) -> tuple[WorkOrder, ...]:
+         return tuple(self._orders)
+ 
+-    def list_orders(self, status: str | None = None) -> list[WorkOrder]:
+-        """按状态列出工单；status 为 None 时返回全部。"""
+-        return [o for o in self._orders if status is None or o.status == status]
++    def list_orders(
++        self, status: str | None = None, priority: str | None = None
++    ) -> list[WorkOrder]:
++        """按状态和优先级列出工单；筛选条件为 None 时不按该条件筛选。"""
++        if priority is not None:
++            normalized_priority = priority.strip().upper()
++            if normalized_priority not in VALID_PRIORITIES:
++                raise InvalidPriority(
++                    f"非法优先级 {priority!r}，有效值为 {', '.join(VALID_PRIORITIES)}"
++                )
++        else:
++            normalized_priority = None
++
++        return [
++            order
++            for order in self._orders
++            if (status is None or order.status == status)
++            and (
++                normalized_priority is None
++                or order.priority.strip().upper() == normalized_priority
++            )
++        ]
+ 
+     def counts_by_status(self) -> dict[str, int]:
+         counts = {status: 0 for status in VALID_STATUS}

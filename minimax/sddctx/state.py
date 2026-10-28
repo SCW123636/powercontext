@@ -152,7 +152,9 @@ class TaskState:
                 reason=DEFAULT_REASON,
             )
         )
-        return {"entry_id": saved.entry.id, "text": text}
+        citation = getattr(saved.entry, "citation", None)
+        entry_id = getattr(citation, "entry_id", "") if citation is not None else ""
+        return {"entry_id": entry_id, "version": saved.entry.version, "text": text}
 
     async def record(self, entries: list[tuple[str, str]]) -> list[dict]:
         saved = []
@@ -171,15 +173,20 @@ class TaskState:
             text = getattr(entry, "text", "")
             if not text.startswith(MARKER):
                 continue
-            body = text[len(MARKER) :].strip()
-            label, _, value = body.partition(":")
-            label = label.strip()
-            value = value.strip()
+            label = getattr(entry, "kind", "")
             bucket = {"done": "done", "todo": "todo", "verify": "verification"}.get(label)
             if bucket is None:
                 continue
+            value = text[len(MARKER) :].strip()
             state[bucket].append(value)
-            entries.append({"kind": label, "text": value, "entry_id": getattr(entry, "id", "")})
+            citation = getattr(entry, "citation", None)
+            entries.append(
+                {
+                    "kind": label,
+                    "text": value,
+                    "entry_id": getattr(citation, "entry_id", "") if citation is not None else "",
+                }
+            )
         return {
             "scope_id": self.scope_id,
             "entries": entries,

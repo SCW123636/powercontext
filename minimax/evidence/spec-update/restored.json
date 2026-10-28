@@ -1,0 +1,10 @@
+{
+  "citation": "specs/work-orders.md#SPEC-4.1",
+  "path": "specs/work-orders.md",
+  "anchor": "SPEC-4.1",
+  "symbol": "",
+  "revision": 1,
+  "score": 30.8655,
+  "match": "fulltext",
+  "snippet": "## SPEC-4.1 CSV 导入\n\n`fleetdesk.importer.load_csv(path)` 读取工单 CSV：\n\n- 必需列：`id`、`vehicle`、`status`、`opened_on`；缺列时抛 `MissingColumnError`；\n- `priority` 列可以缺失：整列缺失时所有工单按默认优先级 `P2` 导入；\n- `priority` 单元格为空时同样按 `P2` 处理；\n- 非法优先级按 SPEC-3.1 抛 `InvalidPriority`，并带上 CSV 行号；\n- 合法优先级统一存为大写。\n\n修订：1"
+}

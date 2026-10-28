@@ -1,0 +1,28 @@
+$ /home/lenovo2/mmtest/bin/python -m pytest tests/test_priority_filter.py tests/test_csv_priority.py -q
+exit=1
+
+.......FF                                                                [100%]
+=================================== FAILURES ===================================
+________________ test_invalid_priority_reports_csv_line_number _________________
+
+    def test_invalid_priority_reports_csv_line_number() -> None:
+>       with pytest.raises(InvalidPriority) as excinfo:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE InvalidPriority
+
+tests/test_csv_priority.py:27: Failed
+____________________ test_lowercase_priority_is_normalized _____________________
+
+    def test_lowercase_priority_is_normalized() -> None:
+        orders = load_csv(DATA / "work_orders_lower_priority.csv")
+>       assert [o.priority for o in orders] == ["P1", "P0"]
+E       AssertionError: assert ['p1', 'p0'] == ['P1', 'P0']
+E         
+E         At index 0 diff: 'p1' != 'P1'
+E         Use -v to get more diff
+
+tests/test_csv_priority.py:34: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_csv_priority.py::test_invalid_priority_reports_csv_line_number
+FAILED tests/test_csv_priority.py::test_lowercase_priority_is_normalized - As...
+2 failed, 7 passed in 0.68s

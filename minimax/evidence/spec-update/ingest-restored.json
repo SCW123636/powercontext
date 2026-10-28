@@ -1,0 +1,10 @@
+{
+  "ingested": 39,
+  "removed": 0,
+  "counts": {
+    "spec": 6,
+    "code": 17,
+    "test": 16
+  },
+  "total_in_db": 39
+}

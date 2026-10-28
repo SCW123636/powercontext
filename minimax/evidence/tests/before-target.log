@@ -1,0 +1,112 @@
+$ /home/lenovo2/mmtest/bin/python -m pytest tests/test_priority_filter.py tests/test_csv_priority.py -q
+exit=1
+
+FFFFFFFFF                                                                [100%]
+=================================== FAILURES ===================================
+___________________________ test_filter_by_priority ____________________________
+
+service = <fleetdesk.service.WorkOrderService object at 0x7f70f95cf320>
+
+    def test_filter_by_priority(service: WorkOrderService) -> None:
+>       assert [o.id for o in service.list_orders(priority="P0")] == ["WO-1001", "WO-1005"]
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: WorkOrderService.list_orders() got an unexpected keyword argument 'priority'
+
+tests/test_priority_filter.py:18: TypeError
+______________________ test_status_and_priority_intersect ______________________
+
+service = <fleetdesk.service.WorkOrderService object at 0x7f70f9610770>
+
+    def test_status_and_priority_intersect(service: WorkOrderService) -> None:
+>       assert [o.id for o in service.list_orders(status="open", priority="P1")] == ["WO-1006"]
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: WorkOrderService.list_orders() got an unexpected keyword argument 'priority'
+
+tests/test_priority_filter.py:22: TypeError
+______________________ test_none_priority_keeps_full_list ______________________
+
+service = <fleetdesk.service.WorkOrderService object at 0x7f70f96133b0>
+
+    def test_none_priority_keeps_full_list(service: WorkOrderService) -> None:
+>       assert len(service.list_orders(priority=None)) == 6
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: WorkOrderService.list_orders() got an unexpected keyword argument 'priority'
+
+tests/test_priority_filter.py:26: TypeError
+_____________________ test_unknown_priority_filter_raises ______________________
+
+service = <fleetdesk.service.WorkOrderService object at 0x7f70f9613230>
+
+    def test_unknown_priority_filter_raises(service: WorkOrderService) -> None:
+        with pytest.raises(InvalidPriority):
+>           service.list_orders(priority="P9")
+E           TypeError: WorkOrderService.list_orders() got an unexpected keyword argument 'priority'
+
+tests/test_priority_filter.py:31: TypeError
+_________________ test_lowercase_priority_filter_is_normalized _________________
+
+service = <fleetdesk.service.WorkOrderService object at 0x7f70f9610bc0>
+
+    def test_lowercase_priority_filter_is_normalized(service: WorkOrderService) -> None:
+>       assert [o.id for o in service.list_orders(priority="p1")] == ["WO-1002", "WO-1006"]
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: WorkOrderService.list_orders() got an unexpected keyword argument 'priority'
+
+tests/test_priority_filter.py:35: TypeError
+_________________ test_missing_priority_column_defaults_to_p2 __________________
+
+    def test_missing_priority_column_defaults_to_p2() -> None:
+        orders = load_csv(DATA / "work_orders_no_priority.csv")
+>       assert [o.priority for o in orders] == ["P2", "P2"]
+E       AssertionError: assert ['', ''] == ['P2', 'P2']
+E         
+E         At index 0 diff: '' != 'P2'
+E         Use -v to get more diff
+
+tests/test_csv_priority.py:14: AssertionError
+___________________ test_empty_priority_cell_defaults_to_p2 ____________________
+
+tmp_path = PosixPath('/tmp/pytest-of-lenovo2/pytest-29/test_empty_priority_cell_defau0')
+
+    def test_empty_priority_cell_defaults_to_p2(tmp_path: Path) -> None:
+        rows = tmp_path / "empty_priority.csv"
+        rows.write_text(
+            "id,vehicle,status,priority,opened_on\nWO-9,京A-1024,open,,2026-10-28\n",
+            encoding="utf-8",
+        )
+>       assert load_csv(rows)[0].priority == "P2"
+E       AssertionError: assert '' == 'P2'
+E         
+E         - P2
+
+tests/test_csv_priority.py:23: AssertionError
+________________ test_invalid_priority_reports_csv_line_number _________________
+
+    def test_invalid_priority_reports_csv_line_number() -> None:
+>       with pytest.raises(InvalidPriority) as excinfo:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE InvalidPriority
+
+tests/test_csv_priority.py:27: Failed
+____________________ test_lowercase_priority_is_normalized _____________________
+
+    def test_lowercase_priority_is_normalized() -> None:
+        orders = load_csv(DATA / "work_orders_lower_priority.csv")
+>       assert [o.priority for o in orders] == ["P1", "P0"]
+E       AssertionError: assert ['p1', 'p0'] == ['P1', 'P0']
+E         
+E         At index 0 diff: 'p1' != 'P1'
+E         Use -v to get more diff
+
+tests/test_csv_priority.py:34: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_priority_filter.py::test_filter_by_priority - TypeError: Wo...
+FAILED tests/test_priority_filter.py::test_status_and_priority_intersect - Ty...
+FAILED tests/test_priority_filter.py::test_none_priority_keeps_full_list - Ty...
+FAILED tests/test_priority_filter.py::test_unknown_priority_filter_raises - T...
+FAILED tests/test_priority_filter.py::test_lowercase_priority_filter_is_normalized
+FAILED tests/test_csv_priority.py::test_missing_priority_column_defaults_to_p2
+FAILED tests/test_csv_priority.py::test_empty_priority_cell_defaults_to_p2 - ...
+FAILED tests/test_csv_priority.py::test_invalid_priority_reports_csv_line_number
+FAILED tests/test_csv_priority.py::test_lowercase_priority_is_normalized - As...
+9 failed in 0.96s

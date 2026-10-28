@@ -1,0 +1,19 @@
+$ /home/lenovo2/mmtest/bin/python -m pytest tests/test_priority_filter.py tests/test_csv_priority.py -q
+exit=1
+
+.......F.                                                                [100%]
+=================================== FAILURES ===================================
+________________ test_invalid_priority_reports_csv_line_number _________________
+
+    def test_invalid_priority_reports_csv_line_number() -> None:
+        with pytest.raises(InvalidPriority) as excinfo:
+            load_csv(DATA / "work_orders_bad_priority.csv")
+>       assert excinfo.value.line == 3
+E       assert None == 3
+E        +  where None = InvalidPriority('非法优先级 "work_orders_bad_priority.csv 第 3 行优先级非法：\'P9\'"，只允许 P0/P1/P2/P3').line
+E        +    where InvalidPriority('非法优先级 "work_orders_bad_priority.csv 第 3 行优先级非法：\'P9\'"，只允许 P0/P1/P2/P3') = <ExceptionInfo InvalidPriority('非法优先级 "work_orders_bad_priority.csv 第 3 行优先级非法：\'P9\'"，只允许 P0/P1/P2/P3') tblen=2>.value
+
+tests/test_csv_priority.py:29: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_csv_priority.py::test_invalid_priority_reports_csv_line_number
+1 failed, 8 passed in 0.45s
