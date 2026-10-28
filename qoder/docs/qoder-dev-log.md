@@ -69,4 +69,4 @@ Qoder 依次完成：
   三段实跑终端输出、验证结果表、运行方式；
 - 站点源码在仓库 `qoder/site/`（`index.html` + `styles.css`），与线上版本同源。
 
-Qoder 账号 UID：（提交时填写，用于核对站点归属与使用记录）
+Qoder 账号 UID：`01a1690c-80f5-7978-9331-460f3ef0b282`（Sites 项目 owner_user_id，用于核对站点归属）
