@@ -9,8 +9,13 @@
 - 规格：`workspace/specs/work-orders.md`（SPEC-2.1 / 3.1 / 3.2 / 4.1 / 4.2 / 5.1）
 - 代码：`workspace/fleetdesk/{models,importer,service,cli}.py`
 - 测试：`workspace/tests/test_priority_filter.py`（5）、`test_csv_priority.py`（4）、`test_regression.py`（7）
+- 初始数据：`workspace/data/work_orders.csv`（正常数据）、`work_orders_no_priority.csv`（缺列）、
+  `work_orders_bad_priority.csv`（第 3 行非法优先级）、`work_orders_lower_priority.csv`（小写优先级）
 
 修改前 `list_orders` 只有 `status` 参数，`load_csv` 原样保存优先级，所以 9 个功能用例全失败。
+
+代码版本：修改前 = 提交 `13fd41cd`；修改后 = 提交 `c3bad0ba`（引入本轮代码改动与证据）。
+`evidence/snapshots/before|after/` 与 `evidence/patch.diff` 对应这两个版本。
 
 ## 2. 需要导入的材料
 
@@ -111,6 +116,14 @@ PYTHONPATH=. python agent/run_agent.py \
 `sddctx context` 必须包含四段：适用规格、需要修改的代码、用于验证的测试、任务状态（PowerContext），
 且每条都带真实来源引用（`specs/work-orders.md#SPEC-4.1`、`fleetdesk/importer.py::load_csv` 等）。
 本次输出：规格 4 条、代码 5 个符号、测试 6 个，见 `evidence/context-after-restart.md`。
+
+本任务上下文必须包含的来源（评审按此核对）：
+
+| 类别 | 必须出现的来源 |
+| --- | --- |
+| 规格 | `specs/work-orders.md#SPEC-4.1`、`#SPEC-3.2`、`#SPEC-2.1`、`#SPEC-3.1` |
+| 代码 | `fleetdesk/importer.py::load_csv`、`fleetdesk/service.py::WorkOrderService`（类条目含 `list_orders` 源码）、`fleetdesk/cli.py::main` |
+| 测试 | `tests/test_csv_priority.py::test_invalid_priority_reports_csv_line_number`、`test_missing_priority_column_defaults_to_p2`、`test_empty_priority_cell_defaults_to_p2`、`tests/test_priority_filter.py::test_status_and_priority_intersect`、`test_unknown_priority_filter_raises` |
 
 ### 4.3 任务状态复用
 
