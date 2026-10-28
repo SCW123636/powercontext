@@ -62,6 +62,11 @@ Qoder 依次完成：
 
 ## 6. 站点
 
-Qoder Sites 建站与发布记录见本节后续提交（站点地址在项目 README 与提交材料中）。
+- Qoder Sites 新建站点 `LapCoach`，地址 <https://lapcoach-yeo8k3u7djw.qoder.zone>；
+- 首版冻结草稿准备好后直接发布，发布后把可见范围改为「任何人都可访问」（`public`），
+  用未登录的 HTTP 客户端回查过：标题、正文与「C6 apex 66.1」等实跑片段都能取到；
+- 站点内容：项目简介、要解决的问题、核心功能、记忆机制（写入的条目 + `prepare_context` 返回）、
+  三段实跑终端输出、验证结果表、运行方式；
+- 站点源码在仓库 `qoder/site/`（`index.html` + `styles.css`），与线上版本同源。
 
 Qoder 账号 UID：（提交时填写，用于核对站点归属与使用记录）

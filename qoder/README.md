@@ -3,6 +3,8 @@
 把每场练习赛的遥测 CSV 变成**可复用的复盘结论**：结论写进 PowerContext，
 下一次练车时自动带出来，不用再靠人脑记「上次那个弯我是怎么丢的时间」。
 
+项目网站（Qoder Sites，公开访问）：<https://lapcoach-yeo8k3u7djw.qoder.zone>
+
 ## 要解决的问题
 
 车队（或个人练车）每场下来有几十个遥测文件，复盘时要：
@@ -74,6 +76,7 @@ qoder/
 │   ├── memory.py      # PowerContext：嵌入式 Server、车手 Scope、记忆读写与检索
 │   └── telemetry.py   # CSV → 圈 / 分段 / 弯道
 ├── samples/two_laps.csv
+├── site/               # Qoder Sites 项目网站源码（index.html + styles.css）
 ├── docs/verification.md
 └── docs/qoder-dev-log.md
 ```

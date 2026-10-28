@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LapCoach · 带记忆的赛车遥测复盘助手</title>
+<meta name="description" content="LapCoach 把遥测 CSV 变成复盘结论，写进 PowerContext 记忆；下一次练车自动带出上次的圈速与薄弱弯。">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true"></span>
+      LapCoach
+    </a>
+    <nav aria-label="页面导航">
+      <a href="#problem">问题</a>
+      <a href="#features">功能</a>
+      <a href="#memory">记忆</a>
+      <a href="#output">实跑输出</a>
+      <a href="#run">运行</a>
+    </nav>
+    <a class="nav-cta" href="https://github.com/SCW123636/powercontext/tree/2026-competition-ecosystem/qoder" target="_blank" rel="noreferrer">代码仓库</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero wrap">
+    <p class="eyebrow">2026 OceanBase 初赛 · Qoder 赛道</p>
+    <h1>每场练习赛的结论，<br><em>下一次自动带回来。</em></h1>
+    <p class="lede">
+      LapCoach 读入遥测 CSV，算出最快圈与最亏的弯，把结论写成一条 PowerContext 记忆。
+      下一场开跑前，它先把上次的记录翻出来做对比——不用再靠人脑记住「那个弯我到底怎么丢的时间」。
+    </p>
+    <div class="cta-row">
+      <a class="btn primary" href="#output">看真实运行输出</a>
+      <a class="btn ghost" href="https://github.com/SCW123636/powercontext/tree/2026-competition-ecosystem/qoder" target="_blank" rel="noreferrer">读源码与运行说明</a>
+    </div>
+    <dl class="stats">
+      <div><dt>单圈长度</dt><dd>3.24 km</dd></div>
+      <div><dt>识别弯道</dt><dd>8 个</dd></div>
+      <div><dt>关键损失</dt><dd>C6 +0.200 s</dd></div>
+      <div><dt>复盘命令</dt><dd>1 条</dd></div>
+    </dl>
+  </section>
+
+  <section id="problem" class="wrap section">
+    <div class="section-head">
+      <p class="eyebrow">要解决的问题</p>
+      <h2>练完车，数据在，结论没了</h2>
+      <p class="sub">车队每场下来几十个遥测文件。前三件事每次都在重复，第四件事从来没人做。</p>
+    </div>
+    <div class="grid three">
+      <article class="card">
+        <h3>① 手算圈速与分段</h3>
+        <p>打开 CSV、对齐时间轴、切分段，算出哪一圈更快。一个上午就没了。</p>
+      </article>
+      <article class="card">
+        <h3>② 逐弯找损失</h3>
+        <p>刹车点、apex、出弯速度要一个个弯比对，肉眼扫图表，容易漏掉真正吃亏的弯。</p>
+      </article>
+      <article class="card">
+        <h3>③ 结论靠人记</h3>
+        <p>「上次 C6 慢了」写在聊天记录里。换人接手、隔一周再来，等于重新开始。</p>
+      </article>
+    </div>
+    <div class="callout">
+      <p><strong>LapCoach 的取舍：</strong>计算交给命令，记忆交给 PowerContext。一次 ingest 同时完成两件事，下一次 ingest 先把上一次的结论读出来。</p>
+    </div>
+  </section>
+
+  <section id="features" class="wrap section">
+    <div class="section-head">
+      <p class="eyebrow">核心功能</p>
+      <h2>一条命令，三步都做完</h2>
+    </div>
+    <div class="grid three">
+      <article class="card feature">
+        <span class="num">01</span>
+        <h3>遥测解析</h3>
+        <p>自动识别时间、距离、速度、油门、刹车、挡位、GPS 列，兼容 km/h、mph、m/s 与逗号小数；按圈号或时间间隔分圈。</p>
+      </article>
+      <article class="card feature">
+        <span class="num">02</span>
+        <h3>逐弯对比</h3>
+        <p>找出最快圈，与参考圈对齐每个弯的刹车点、apex 速度、出弯速度与分段耗时，直接指出最亏的三个弯。</p>
+      </article>
+      <article class="card feature">
+        <span class="num">03</span>
+        <h3>记忆复用</h3>
+        <p>结论写成 <code>measurement</code> 与 <code>observation</code> 两类记忆，按车手隔离；下次同赛道自动检索并给出逐弯进步。</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="memory" class="wrap section">
+    <div class="section-head">
+      <p class="eyebrow">记忆是怎么工作的</p>
+      <h2>PowerContext 在这里不是装饰</h2>
+      <p class="sub">去掉它，「下次自动带出上次结论」和「按问题检索历史」两个功能都不存在。</p>
+    </div>
+
+    <ol class="flow">
+      <li>
+        <h3>ingest</h3>
+        <p>解析 CSV，算最快圈与最亏弯。</p>
+      </li>
+      <li>
+        <h3>写记忆</h3>
+        <p>人读一句结论 + 一行机器可解析的字段，写入该车手的 Scope。</p>
+      </li>
+      <li>
+        <h3>下次先检索</h3>
+        <p>同赛道的历史 <code>measurement</code> 被命中，逐弯 apex 变化算出来。</p>
+      </li>
+      <li>
+        <h3>ask</h3>
+        <p>按问题检索条目，返回 entry_id + revision，并组装可交给模型的上下文。</p>
+      </li>
+    </ol>
+
+    <div class="code-pair">
+      <div class="snippet">
+        <div class="snippet-head">写入的记忆（节选）</div>
+        <pre>Zandvoort 2026-10-28：第 2 圈最快 59.600s，比第 1 圈快 0.200s，最亏的是 C6（+0.200s）。
+track=Zandvoort date=2026-10-28 kind=measurement driver=alex
+file=two_laps.csv lap=2 best_s=59.600 ref_lap=1 delta_s=-0.200
+worst=C6 corners=C1=99.7,C2=161.1,...,C6=66.1,...</pre>
+      </div>
+      <div class="snippet">
+        <div class="snippet-head">prepare_context 返回（节选）</div>
+        <pre>BEGIN_POWERCONTEXT_PREPARED_CONTEXT_V1
+{"trust":"untrusted_history","items":[
+  {"citation":{"memory_ref":{...,"revision":7},
+   "entry_id":"mem_ent_5c3e70e8..."},
+   "content":"Zandvoort 2026-10-28：第 2 圈最快 59.600s ...",
+   "truncated":false},
+  ...]}
+END_POWERCONTEXT_PREPARED_CONTEXT_V1</pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="output" class="wrap section">
+    <div class="section-head">
+      <p class="eyebrow">实跑输出</p>
+      <h2>同一个数据目录，连着跑两天</h2>
+      <p class="sub">下面是本机真实终端输出（Ubuntu 22.04 / Python 3.12 / PowerContext 1.2.0），未做修饰。</p>
+    </div>
+
+    <figure class="terminal">
+      <figcaption><span class="dot"></span>第一天 · 没有历史，写基线</figcaption>
+      <pre><span class="prompt">$</span> uv run lapcoach ingest samples/two_laps.csv --driver alex --track Zandvoort --day 2026-10-28
+
+Zandvoort · 2026-10-28 · two_laps.csv
+| lap | time (s) | length (m) | max km/h | mean km/h |
+| 1   | 59.8      | 3239.9     | 241.2    | 195.1     |
+| 2   | 59.6      | 3238.0     | 241.2    | 195.7     |
+
+最快 2 圈 59.600s，比参考 1 圈快 0.200s
+| corner | apex (m) | apex km/h | d apex | d brake (m) | d time (s) |
+| 6      | 2361.2   | 66.1      | -5.3   | -1.9        | 0.2        |
+...
+最亏：C6 +0.200s, C4 +0.100s
+
+记忆复用（来自 PowerContext）：这个车手还没有同赛道的记录，本次作为基线写入。
+
+写入 memory: mem_ent_54ef5f732969436a92195118ec0cbc75
+写入 observation: mem_ent_e3189c79f5e649b48b7735fb0d3a8d1e
+scope: scp_007b6pv551yqk2nvb6yw6fh7fg</pre>
+    </figure>
+
+    <figure class="terminal">
+      <figcaption><span class="dot"></span>第二天 · 记忆被读出来</figcaption>
+      <pre><span class="prompt">$</span> uv run lapcoach ingest samples/two_laps_day2.csv --driver alex --track Zandvoort --day 2026-10-29
+
+最快 2 圈 59.380s，比参考 1 圈快 0.411s
+| corner | apex (m) | apex km/h | d apex | d brake (m) | d time (s) |
+| 6      | 2361.2   | 70.0      | -1.3   | -1.9        | -0.006     |
+...
+最亏：C4 +0.096s, C8 +0.003s, C3 +0.002s
+
+记忆复用（来自 PowerContext）：
+  - 上次记忆：2026-10-28 在 Zandvoort 最快 59.600s
+  - 本场最快 59.380s，比上次 快 0.220s
+  - C6 apex 66.1 → 70.0 km/h（↑3.9）</pre>
+    </figure>
+
+    <figure class="terminal">
+      <figcaption><span class="dot"></span>按问题检索历史</figcaption>
+      <pre><span class="prompt">$</span> uv run lapcoach ask "C6 上我上次损失了多少时间" --driver alex
+
+检索关键词：C6
+命中 3 条记忆：
+  - Zandvoort 2026-10-28：第 2 圈最快 59.600s，比第 1 圈快 0.200s，最亏的是 C6（+0.200s）。
+    来源 mem_ent_5c3e70e882964c629a59b4d4aff1d16a · revision 7
+  - Zandvoort 2026-10-28：C6 是全圈最亏的弯，apex 66.1 km/h，
+    比参考圈低 5.3 km/h，刹车点早 2 m（+0.200s）。下一场先练这个弯。
+    来源 mem_ent_c5331ad231e54bb4834b6e175d50c081 · revision 7
+
+PowerContext 组装的上下文（可直接作为消息交给模型）：
+PowerContext prepared untrusted historical context. ...</pre>
+    </figure>
+  </section>
+
+  <section id="run" class="wrap section">
+    <div class="section-head">
+      <p class="eyebrow">运行方式</p>
+      <h2>评审在本机五分钟跑通</h2>
+      <p class="sub">只需要 Python 3.11+ 与 uv。PowerContext Server 由 CLI 在进程内拉起，数据落 SQLite，不用另开服务。</p>
+    </div>
+    <div class="grid two">
+      <div class="card">
+        <h3>三条命令</h3>
+        <pre class="inline-pre">cd qoder
+uv sync
+uv run lapcoach ingest samples/two_laps.csv --driver alex --track Zandvoort
+uv run lapcoach ask "C6 上我上次损失了多少时间" --driver alex</pre>
+        <p class="note">换一份第二天的 CSV 再 ingest 一次，就能看到「记忆复用」段落。</p>
+      </div>
+      <div class="card">
+        <h3>技术栈</h3>
+        <ul class="ticks">
+          <li><strong>PowerContext 1.2.0</strong>：车手 Scope、memory entry、FTS 检索、<code>prepare_context</code></li>
+          <li><strong>遥测引擎</strong>：纯标准库解析与弯道识别，复用本队魔搭 Skill 中验证过的实现</li>
+          <li><strong>CLI</strong>：<code>ingest</code> / <code>ask</code>，支持 <code>--json</code></li>
+        </ul>
+        <p class="note">也支持 <code>LAPCOACH_POWERCONTEXT_URL</code> 指向已运行的外部 Server。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap section">
+    <div class="section-head">
+      <p class="eyebrow">验证结果</p>
+      <h2>跑过什么、边界在哪</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>项目</th><th>实测结果</th></tr></thead>
+        <tbody>
+          <tr><td>两圈样例 · 圈速与弯道</td><td>59.800 / 59.600 s，8 个弯，最亏 C6 +0.200 s</td></tr>
+          <tr><td>跨进程记忆复用</td><td>第二天读到 2026-10-28 的结论，输出 C6 apex 66.1 → 70.0 km/h</td></tr>
+          <tr><td>按问题检索</td><td>命中 3 条，带 entry_id 与 revision</td></tr>
+          <tr><td>prepare_context</td><td>返回带 citation 的上下文块，状态 ready</td></tr>
+          <tr><td>记忆为空</td><td>提示先 ingest，不中断</td></tr>
+          <tr><td>单车文件</td><td>无可比亏损弯，只写 measurement，不写 observation</td></tr>
+          <tr><td>坏 CSV</td><td>解析阶段报错并列出找过的列名，不写记忆</td></tr>
+          <tr><td>换车手</td><td>新 Scope，检索不到其他车手的记忆</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">完整步骤与输出见仓库 <code>qoder/docs/verification.md</code>。</p>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <div>
+      <p class="brand-line"><span class="brand-mark" aria-hidden="true"></span> LapCoach</p>
+      <p class="muted">赛车遥测复盘助手 · 2026 OceanBase 初赛 Qoder 赛道</p>
+    </div>
+    <ul class="links">
+      <li><a href="https://github.com/SCW123636/powercontext/tree/2026-competition-ecosystem/qoder" target="_blank" rel="noreferrer">代码仓库</a></li>
+      <li><a href="https://github.com/oceanbase/powercontext" target="_blank" rel="noreferrer">PowerContext</a></li>
+      <li><a href="https://docs.astral.sh/uv/" target="_blank" rel="noreferrer">uv</a></li>
+    </ul>
+  </div>
+</footer>
+
+</body>
+</html>
