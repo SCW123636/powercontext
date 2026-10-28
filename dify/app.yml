@@ -1,0 +1,272 @@
+app:
+  description: 一个会记仇、会翻旧账的赛车工程师。你说过的每个借口、每次设定改动，它都记在 PowerContext 里，下一场比赛继续拿捏你。
+  icon: 🏎️
+  icon_background: '#FFEAD5'
+  mode: advanced-chat
+  name: Pit Wall 电台 · 会记仇的工程师
+  use_icon_as_answer_icon: false
+kind: app
+version: 0.1.5
+workflow:
+  conversation_variables: []
+  environment_variables:
+    - description: PowerContext 服务地址（默认本地 9787 端口）
+      id: env-powercontext-url
+      name: POWERCONTEXT_URL
+      selector: [env, POWERCONTEXT_URL]
+      value: http://host.docker.internal:8000
+      value_type: string
+    - description: 本应用使用的 PowerContext Scope，由 scripts/init_scope.sh 创建后填入
+      id: env-scope-id
+      name: SCOPE_ID
+      selector: [env, SCOPE_ID]
+      value: replace-with-scope-id
+      value_type: string
+  features:
+    file_upload:
+      allowed_file_extensions: []
+      allowed_file_types: [image]
+      allowed_file_upload_methods: [local_file]
+      enabled: false
+      number_limits: 3
+    opening_statement: 无线电接通。「又是你。上一场你说刹车没问题，结果第三圈就锁死。今天想聊什么？」
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions:
+      - 我这次把前翼加了两度，行不行？
+      - 上次你到底记了我什么黑历史？
+      - 雨战我想把胎压打高一点
+    suggested_questions_after_answer:
+      enabled: true
+    text_to_speech:
+      enabled: false
+      language: ''
+      voice: ''
+  graph:
+    edges:
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: start
+          targetType: http-request
+        id: start-source-http_recall-target
+        source: start
+        sourceHandle: source
+        target: http_recall
+        targetHandle: target
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: http-request
+          targetType: llm
+        id: http_recall-source-llm-target
+        source: http_recall
+        sourceHandle: source
+        target: llm
+        targetHandle: target
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: llm
+          targetType: http-request
+        id: llm-source-http_remember-target
+        source: llm
+        sourceHandle: source
+        target: http_remember
+        targetHandle: target
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: http-request
+          targetType: answer
+        id: http_remember-source-answer-target
+        source: http_remember
+        sourceHandle: source
+        target: answer
+        targetHandle: target
+    nodes:
+      - data:
+          desc: ''
+          selected: false
+          title: 开始
+          type: start
+          variables: []
+        height: 90
+        id: start
+        position:
+          x: 40
+          y: 280
+        positionAbsolute:
+          x: 40
+          y: 280
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+      - data:
+          authorization:
+            config: null
+            type: no-auth
+          body:
+            data:
+              - id: scope_id
+                type: text
+                value: '{{#env.SCOPE_ID#}}'
+              - id: query
+                type: text
+                value: '{{#sys.query#}}'
+              - id: max_bytes
+                type: number
+                value: 2000
+            type: json
+          desc: 从 PowerContext 取与本轮问题相关的历史记忆
+          headers: 'Content-Type:application/json'
+          method: post
+          params: ''
+          selected: false
+          timeout:
+            max_connect_timeout: 5
+            max_read_timeout: 10
+            max_retry_times: 2
+            max_write_timeout: 5
+            retry_interval: 200
+          title: 召回记忆
+          type: http-request
+          url: '{{#env.POWERCONTEXT_URL#}}/v1/context/prepare'
+          variables: []
+        height: 140
+        id: http_recall
+        position:
+          x: 344
+          y: 280
+        positionAbsolute:
+          x: 344
+          y: 280
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+      - data:
+          context:
+            enabled: false
+            variable_selector: []
+          desc: 扮演工程师，用记忆内容对车手翻旧账
+          model:
+            completion_params:
+              max_tokens: 512
+              temperature: 0.8
+            mode: chat
+            name: gpt-4o-mini
+            provider: openai
+          prompt_template:
+            - role: system
+              text: |
+                你是「Pit Wall 电台」的赛车工程师，说话像真正的车队无线电台：短句、直接、偶尔刻薄但不侮辱人。
+                你管理一位车手，你们已经合作了很多场比赛。
+
+                下面是从 PowerContext 检索到的历史记忆（可能是空的）：
+                ---
+                {{#http_recall.body#}}
+                ---
+
+                规则：
+                1. 如果记忆里有与当前问题相关的旧事（承诺、借口、设定改动、事故），先用一句话点名翻旧账，再给建议。
+                2. 如果记忆为空或无关，只回答当前问题，并追问一个能写进记忆的关键信息（例如胎压、赛道、天气）。
+                3. 建议必须具体到可执行的数值或步骤，不要空话。
+                4. 控制在 120 字以内。
+                5. 不要声称你记得记忆里没有的事情。
+            - role: user
+              text: '{{#sys.query#}}'
+          selected: false
+          title: 工程师回应
+          type: llm
+          variables: []
+          vision:
+            enabled: false
+        height: 140
+        id: llm
+        position:
+          x: 648
+          y: 280
+        positionAbsolute:
+          x: 648
+          y: 280
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+      - data:
+          authorization:
+            config: null
+            type: no-auth
+          body:
+            data:
+              - id: scope_id
+                type: text
+                value: '{{#env.SCOPE_ID#}}'
+              - id: source_id
+                type: text
+                value: 'dify-{{#sys.conversation_id#}}-{{#sys.dialogue_count#}}'
+              - id: content
+                type: text
+                value: "车手说：{{#sys.query#}}\n工程师回答：{{#llm.text#}}"
+            type: json
+          desc: 把本轮对话写入 PowerContext，供下一轮/下一场召回
+          headers: 'Content-Type:application/json'
+          method: post
+          params: ''
+          selected: false
+          timeout:
+            max_connect_timeout: 5
+            max_read_timeout: 10
+            max_retry_times: 2
+            max_write_timeout: 5
+            retry_interval: 200
+          title: 写入记忆
+          type: http-request
+          url: '{{#env.POWERCONTEXT_URL#}}/v1/sources/content'
+          variables: []
+        height: 140
+        id: http_remember
+        position:
+          x: 952
+          y: 280
+        positionAbsolute:
+          x: 952
+          y: 280
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+      - data:
+          answer: '{{#llm.text#}}'
+          desc: ''
+          selected: false
+          title: 电台回答
+          type: answer
+          variables: []
+        height: 103
+        id: answer
+        position:
+          x: 1256
+          y: 280
+        positionAbsolute:
+          x: 1256
+          y: 280
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 244
+    viewport:
+      x: 0
+      y: 0
+      zoom: 0.7
