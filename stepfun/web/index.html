@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PitWall KB — 端侧向量化 + seekdb 混合检索</title>
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<header>
+  <h1>PitWall KB</h1>
+  <p class="sub">浏览器本地向量化 · seekdb 单语句混合检索</p>
+  <div class="badges">
+    <span id="backend" class="badge">推理后端：检测中…</span>
+    <span id="model" class="badge">模型：Xenova/all-MiniLM-L6-v2 · INT8</span>
+    <span id="dbstate" class="badge">seekdb：未连接</span>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1. 导入语料</h2>
+    <div class="row">
+      <input id="kbname" value="racing-notes" placeholder="知识库名称" />
+      <input id="files" type="file" accept=".txt,.md,text/plain,text/markdown" multiple />
+    </div>
+    <textarea id="paste" rows="4" placeholder="也可以直接粘贴文本文档，一段即一篇"></textarea>
+    <div class="row">
+      <button id="ingestBtn" disabled>导入并写入 seekdb</button>
+      <span id="ingestInfo" class="muted">等待模型加载</span>
+    </div>
+    <progress id="prog" max="100" value="0"></progress>
+    <ul id="doclist" class="docs"></ul>
+  </section>
+
+  <section class="card">
+    <h2>2. 查询</h2>
+    <div class="row">
+      <input id="q" placeholder="例如：如何减少高速弯的转向不足" />
+      <button id="qBtn" disabled>检索</button>
+    </div>
+    <p id="qinfo" class="muted"></p>
+    <ol id="hits" class="hits"></ol>
+  </section>
+
+  <section class="card">
+    <h2>3. 基准测试</h2>
+    <p class="muted">固定 12 条查询，分别记录模型加载、文档向量化吞吐、写入+索引刷新、查询端到端延迟（中位数），结果可下载为 JSON。</p>
+    <div class="row">
+      <button id="benchBtn" disabled>运行基准测试</button>
+      <button id="dlBtn" disabled>下载结果 JSON</button>
+    </div>
+    <pre id="benchOut" class="bench"></pre>
+  </section>
+</main>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>

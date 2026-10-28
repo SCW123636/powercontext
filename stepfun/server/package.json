@@ -1,0 +1,14 @@
+{
+  "name": "pitwall-kb-server",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "seekdb data layer for the PitWall KB browser-side embedding demo",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "seekdb": "^1.4.0"
+  }
+}
