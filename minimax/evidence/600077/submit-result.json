@@ -1,0 +1,60 @@
+{
+  "url": "https://open.oceanbase.com/train/detail/21?questionId=600077",
+  "hasModal": true,
+  "modalText": "成绩提测\n代码仓库地址\n使用大赛报名登记的团队仓库，此处不可修改\nCommit id\nBranch\n长度1-64个字符\n重 置\n提 交",
+  "toast": "",
+  "bodyTail": "战，from zero to hero，在实战中成长\n\n训练营使用说明\n‹\nseekdb 基础实践\nseekdb题目\nseekdb 性能优化\nPowerContext 题目\nAMD\nMiniMax\nQoder\nStepFun\nDify\n高德地图\nModelScope\n›\n我的信息\n查看提测记录立即提测\n题目介绍题目列表排行榜\n\n生态伙伴2026年数据库大赛题目：MiniMax\n\n训练营使用说明\n\n新手体验\n\n快速上手\n软件下载\n免费试用\n在线体验\n\n学习\n\n博客\n电子书\n在线课堂\n培训认证\n\n互动\n\n活动\n数据库大赛\nAI 黑客松\n积分兑换\n训练营\n精选问答\n\n技术支持\n\n问答\n文档\n知识库\nGitBook\n\n加入社区\n\n开源代码贡献\n参与社区共建\n参与文档共建\n\n联系我们\n\n社区小助手\n钉钉技术答疑群\nGitHub\n快速上手\n京公网安备11010802047223号|京ICP备20024574号-1|合字B1.B2-20250395|网站服务协议|隐私协议|安全响应协议| OceanBase 版权所有 © 2026 基础资源和备案服务由阿里云提供\nAI\n服务\n成绩提测\n代码仓库地址\n使用大赛报名登记的团队仓库，此处不可修改\nCommit id\nBranch\n长度1-64个字符\n重 置\n提 交\n成绩提测\n提测成功\n您可点击「查看提交记录」查看提测记录和成绩信息\n查看提测记录\n关 闭",
+  "records": {
+    "requestId": "7340e07c-4b58-40b0-9860-cfc0e70ac11b",
+    "traceId": "7340e07c-4b58-40b0-9860-cfc0e70ac11b",
+    "hostName": null,
+    "env": null,
+    "code": 200,
+    "message": "操作成功",
+    "data": {
+      "pageNum": 1,
+      "pageSize": 10,
+      "totalPage": 1,
+      "total": 1,
+      "list": [
+        {
+          "id": 47225183,
+          "gmtCreate": "2026-10-28T13:53:01.000+00:00",
+          "gmtModified": "2026-10-28T13:53:01.000+00:00",
+          "gitRepo": "https://github.com/SCW123636/powercontext",
+          "branch": "2026-competition-ecosystem",
+          "commitId": "0bb49faaf13407cd582f56dec9b405b9266514f1",
+          "currentRetry": "0",
+          "machineScore": null,
+          "maxScoreFlag": 0,
+          "weight": 1,
+          "taskStatus": 0,
+          "failMsg": null,
+          "resultType": 1,
+          "deleteFlag": 0,
+          "questionId": 600077,
+          "subQuestionId": null,
+          "userId": "200271201731",
+          "testCaseResult": null,
+          "modifier": null,
+          "errorMessage": null,
+          "successCount": null,
+          "failCount": null,
+          "groupName": null,
+          "userName": null,
+          "questionName": "MiniMax",
+          "strMachineScore": null,
+          "player": null,
+          "phoneNumber": null,
+          "activityEnrolmentDTOMultiple": null,
+          "activityGroupInfoDTO": null,
+          "executeTime": null,
+          "groupId": 5295,
+          "testStartTime": null,
+          "testEndTime": null,
+          "waitTime": null
+        }
+      ]
+    }
+  }
+}
