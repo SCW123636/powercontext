@@ -1,0 +1,24 @@
+[project]
+name = "sddctx"
+version = "0.1.0"
+description = "SDD 开发上下文模块：规格/代码/测试索引（seekdb）+ 任务状态复用（PowerContext）+ MiniMax 改码"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pylibseekdb>=1.4.0.post2",
+    "powercontext[cli,server]==1.2.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+sddctx = "sddctx.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sddctx"]
+
+[tool.uv]
+package = true

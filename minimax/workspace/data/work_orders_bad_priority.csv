@@ -1,0 +1,3 @@
+id,vehicle,status,priority,opened_on,note
+WO-3001,京A-2048,open,p1,2026-10-26,小写优先级
+WO-3002,京B-3072,open,P9,2026-10-26,非法优先级
