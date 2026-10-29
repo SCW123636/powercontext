@@ -104,19 +104,62 @@ _CHANGE_TERMS = frozenset(
     "change compare decline decrease drive drove grow growth improve improvement increase".split()
 )
 
+# Headings that mark a page as part of the consolidated financial statements block.
+_INCOME_HEADS = (
+    "consolidated statement of income",
+    "consolidated statements of income",
+    "consolidated statement of operations",
+    "consolidated statements of operations",
+    "consolidated statement of earnings",
+    "consolidated statements of earnings",
+    "summary of financial performance",
+)
+_BALANCE_HEADS = ("consolidated balance sheet", "consolidated balance sheets")
+_CASH_HEADS = (
+    "consolidated statement of cash flow",
+    "consolidated statements of cash flows",
+)
+# Segment tables name their own rows; a question about a segment is answered there.
+_SEGMENT_HEADS = (
+    "by business segment",
+    "net sales by segment",
+    "summary of business segment data",
+    "segment information",
+    "disaggregation of revenue",
+)
+
 _K1 = 1.2
 _B = 0.35
 _BIGRAM_WEIGHT = 0.35
 _SECTION_WEIGHT = 1.5
 _STATEMENT_WEIGHT = 2.0
 
-# A page from a filing the question does not point at keeps at most this share of
-# its own lexical score, so identity has to be proven rather than assumed.
-_OTHER_DOC_WEIGHT = 0.2
+# The consolidated statements form one block, and a question about the figures in a
+# filing is answered by that block even when it names no single statement.
+_FAMILY_WEIGHT = 1.0
+
+# A filing the question does not point at is a guess, so it is never allowed to take
+# the whole result set: every other filing keeps this many slots of the pool.
+_SECONDARY_SLOTS = 2
 _AFFINITY_POWER = 2.0
 
-_NON_ALNUM = re.compile(r"[^a-z0-9]")
-_LEADING_NAME = re.compile(r"[a-z]{4,}")
+_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+_WORD = re.compile(r"[a-z0-9]+")
+_LEADING_NAME = re.compile(r"[a-z0-9]{2,}")
+
+# A name this short can hide inside unrelated words, so it only counts as a mention
+# when it stands alone in the question.
+_MIN_PHRASE_NAME = 4
+
+# A heading is printed in the opening block of a page. Matching a statement title
+# anywhere on the page would also match the many body paragraphs that mention it
+# ("our Consolidated Balance Sheets"), which then outrank the statement itself.
+_LEAD_CHARS = 240
+
+# The fixed pipeline stores one Memory entry per page, and a durable entry body is
+# bounded by the Memory contract. A denser page has to fit that bound or the whole
+# document fails to load, so its tail is cut at a character boundary.
+_MAX_PAGE_BYTES = 8192
 
 
 def _reject_blank(value: str, field: str) -> str:
@@ -226,7 +269,7 @@ def parse_pdf_document(value: PDFDocumentInput) -> tuple[PDFPageInput, ...]:
         page_count = len(raw_pages)
         if page_count < 1:
             raise ValueError("PDF document must contain at least one page")  # noqa: TRY003
-        texts = tuple(_page_text(page) for page in raw_pages)
+        texts = tuple(_page_text(page, value.document_id) for page in raw_pages)
     except ValueError:
         raise
     except Exception as error:
@@ -244,9 +287,22 @@ def parse_pdf_document(value: PDFDocumentInput) -> tuple[PDFPageInput, ...]:
     )
 
 
-def _page_text(page: Any) -> str:
+def _page_text(page: Any, document_id: str) -> str:
+    """Return one page's extractable text, fitted to what a Memory entry can hold.
+
+    A dense table page can exceed the durable entry bound, and then the fixed pipeline
+    refuses the whole document instead of storing it. Cutting the tail keeps the page
+    loadable and keeps its heading and the start of its tables, which is where the
+    questions point; the surviving words still describe the same page.
+    """
+
     text = page.extract_text()
-    return text if isinstance(text, str) else ""
+    if not isinstance(text, str) or not text:
+        return ""
+    budget = _MAX_PAGE_BYTES - len(document_id.encode("utf-8")) - 1
+    if budget <= 0 or len(text.encode("utf-8")) <= budget:
+        return text
+    return text.encode("utf-8")[:budget].decode("utf-8", errors="ignore").rstrip()
 
 
 class PDFPageSourceAdapter:
@@ -342,7 +398,7 @@ def _query(question: str) -> tuple[dict[str, float], list[str]]:
 
 
 class _Page:
-    __slots__ = ("citation", "counts", "document_id", "length", "bigrams", "title_head")
+    __slots__ = ("citation", "counts", "document_id", "length", "bigrams", "lead")
 
     def __init__(self, citation: Any, text: str) -> None:
         document_id, _, body = text.partition("\n")
@@ -352,35 +408,50 @@ class _Page:
         self.counts = Counter(tokens)
         self.length = max(len(tokens), 1)
         self.bigrams = frozenset(zip(tokens, tokens[1:], strict=False))
-        self.title_head = body[:3200].casefold()
+        self.lead = body[:_LEAD_CHARS].casefold()
 
 
 def _identity_of(document_id: str) -> str:
-    """Return the leading name part of a document id, if it is long enough to name."""
+    """Return the leading name part of a document id, if it holds anything nameable."""
 
     match = _LEADING_NAME.match(document_id.casefold())
     return match.group() if match is not None else ""
 
 
 def _named_filings(documents: dict[str, list[_Page]], question: str) -> set[str]:
-    """Return the filings named in the question, judged by the leading part of the id."""
+    """Return the filings named in the question, judged by the leading part of the id.
+
+    A long name is matched against the question with punctuation removed, so
+    "American Express" points at ``AMERICANEXPRESS_2022_10K``. A short name such as
+    ``3m`` or ``aes`` would otherwise hide inside numbers and word endings, so it has
+    to appear as a word of its own.
+    """
 
     squashed = _NON_ALNUM.sub("", question.casefold())
-    return {
-        name for name in documents if (identity := _identity_of(name)) and identity in squashed
-    }
+    words = set(_WORD.findall(question.casefold()))
+    named = set()
+    for document in documents:
+        identity = _identity_of(document)
+        if not identity:
+            continue
+        if len(identity) >= _MIN_PHRASE_NAME:
+            if identity in squashed:
+                named.add(document)
+        elif identity in words:
+            named.add(document)
+    return named
 
 
-def _document_affinity(
+def _document_claim(
     documents: dict[str, list[_Page]], question: str, weights: dict[str, float]
 ) -> dict[str, float]:
-    """Return the share of its own lexical score each filing keeps.
+    """Return how strongly the question points at each filing, on a 0 to 1 scale.
 
-    When the question names one filing, the others keep nothing: a page about another
-    company is never evidence, however well its words match. When the question names
-    no filing, a term that fills most pages of one filing and hardly appears in the
-    others still points at it, and that reading is bounded below by
-    ``_OTHER_DOC_WEIGHT`` because the guess is fallible.
+    A filing named in the question is certain. Otherwise a term that fills most pages
+    of one filing and hardly appears in the others points at it. The value only orders
+    the filings and splits the retrieval slots between them; it never rescales what a
+    page is worth, because a filing that is merely unpopular still has to be able to
+    show its own best pages.
     """
 
     if len(documents) < 2:
@@ -399,13 +470,46 @@ def _document_affinity(
     best = max(spread.values(), default=0.0)
     if best == 0.0:
         return {name: 1.0 if name in named else 0.0 for name in documents}
-    floor = 0.0 if named else _OTHER_DOC_WEIGHT
     return {
         name: 1.0
         if name in named
-        else floor + (1.0 - floor) * (spread[name] / best) ** _AFFINITY_POWER
+        else (spread[name] / best) ** _AFFINITY_POWER
         for name in documents
     }
+
+
+def _document_slots(
+    order: list[str], candidates: dict[str, int], named: set[str], limit: int
+) -> dict[str, int]:
+    """Split ``limit`` retrieval slots between filings, best claim first.
+
+    A question that names its filing has the whole pool for that filing: pages of
+    another company are not evidence, however well their words match. A question that
+    names none is only a guess from term coverage, so the other filings keep
+    ``_SECONDARY_SLOTS`` each and at most half the pool. A filing that cannot fill its
+    share leaves the rest to be taken in claim order.
+    """
+
+    leaders = [name for name in order if name in named]
+    if len(leaders) != 1:
+        leaders = leaders or order[:1]
+    secondary = [name for name in order if name not in leaders]
+    slots = dict.fromkeys(order, 0)
+    if len(leaders) > 1:
+        share = max(1, limit // len(leaders))
+        for index, name in enumerate(leaders):
+            capacity = limit - sum(slots.values()) if index == len(leaders) - 1 else share
+            slots[name] = min(capacity, candidates[name])
+        return slots
+    reserve = 0 if named else limit // 2
+    for name in secondary:
+        take = min(_SECONDARY_SLOTS, reserve, candidates[name])
+        slots[name] = take
+        reserve -= take
+    leader = leaders[0]
+    slots[leader] = min(candidates[leader], limit - sum(slots.values()))
+    return slots
+
 
 
 async def search_pdf_pages(
@@ -471,18 +575,20 @@ async def search_pdf_pages(
     for item in pages.values():
         documents.setdefault(item.document_id, []).append(item)
     owner = _named_filings(documents, question)
+    basis = pages
     if len(owner) == 1:
-        # Rank inside the named filing only, so its own page lengths and term
-        # frequencies set the scale instead of being averaged against every other
-        # filing that happens to share the pool.
+        # Length and term frequency are measured inside the named filing, so its own
+        # page sizes and vocabulary set the scale instead of an average over every
+        # other filing that happens to share the pool. Rivals are still scored.
         only = next(iter(owner))
-        pages = {key: item for key, item in pages.items() if item.document_id == only}
-        documents = {only: documents[only]}
-    affinity = _document_affinity(documents, question, weights)
-    total = len(pages)
-    average = sum(item.length for item in pages.values()) / total
+        pinned = {key: item for key, item in pages.items() if item.document_id == only}
+        if pinned:
+            basis = pinned
+    claim = _document_claim(documents, question, weights)
+    total = len(basis)
+    average = sum(item.length for item in basis.values()) / total
     document_frequency = {
-        term: sum(1 for item in pages.values() if term in item.counts) for term in weights
+        term: sum(1 for item in basis.values() if term in item.counts) for term in weights
     }
     idf = {
         term: math.log(1.0 + (total - frequency + 0.5) / (frequency + 0.5))
@@ -511,43 +617,59 @@ async def search_pdf_pages(
     best = max(scores.values(), default=0.0)
     if best > 0.0:
         for key, item in pages.items():
-            scores[key] += _section_bonus(item.title_head, weights, best)
+            scores[key] += _section_bonus(item.lead, weights, best)
+    ranked: dict[str, list[str]] = {}
     for key, item in pages.items():
-        scores[key] *= affinity.get(item.document_id, 1.0)
-    ordered = sorted(scores, key=lambda key: (-scores[key], key))[:limit]
-    return tuple(citations[key] for key in ordered)
+        if scores[key] > 0.0:
+            ranked.setdefault(item.document_id, []).append(key)
+    if not ranked:
+        return ()
+    for keys in ranked.values():
+        keys.sort(key=lambda key: (-scores[key], key))
+    order = sorted(ranked, key=lambda name: (-claim.get(name, 0.0), name))
+    slots = _document_slots(
+        order, {name: len(keys) for name, keys in ranked.items()}, owner, limit
+    )
+    chosen: list[str] = []
+    taken: set[str] = set()
+    for name in order:
+        for key in ranked[name][: slots[name]]:
+            chosen.append(key)
+            taken.add(key)
+    for name in order:
+        if len(chosen) >= limit:
+            break
+        for key in ranked[name]:
+            if key in taken:
+                continue
+            chosen.append(key)
+            taken.add(key)
+            if len(chosen) >= limit:
+                break
+    return tuple(citations[key] for key in chosen[:limit])
 
 
 def _section_bonus(head: str, weights: dict[str, float], best: float) -> float:
-    """Reward a page whose own heading is the requested statement or section."""
+    """Reward a page whose own heading is the requested statement or section.
+
+    The statement the question names is worth most. A question about the figures that
+    names no single statement still points at the consolidated statements, so every page
+    of that block is treated as a partial answer.
+    """
 
     terms = {term for term, weight in weights.items() if weight >= 1.0}
+    figures = terms & (_INCOME_TERMS | _BALANCE_TERMS | _CASH_TERMS)
+    statements = _INCOME_HEADS + _BALANCE_HEADS + _CASH_HEADS
     bonus = 0.0
-    if terms & _INCOME_TERMS and any(
-        title in head
-        for title in (
-            "consolidated statement of income",
-            "consolidated statements of income",
-            "consolidated statement of operations",
-            "consolidated statements of operations",
-            "summary of financial performance",
-        )
-    ):
+    if terms & _INCOME_TERMS and any(title in head for title in _INCOME_HEADS):
         bonus = _STATEMENT_WEIGHT * best
-    if terms & _BALANCE_TERMS and (
-        "consolidated balance sheet" in head or "consolidated balance sheets" in head
-    ):
+    if terms & _BALANCE_TERMS and any(title in head for title in _BALANCE_HEADS):
         bonus = max(bonus, _STATEMENT_WEIGHT * best)
-    if terms & _CASH_TERMS and (
-        "consolidated statement of cash flows" in head
-        or "consolidated statements of cash flows" in head
-    ):
+    if terms & _CASH_TERMS and any(title in head for title in _CASH_HEADS):
         bonus = max(bonus, _STATEMENT_WEIGHT * best)
-    if "revenue" in terms and terms & _SEGMENT_TERMS and (
-        "summary of business segment data" in head
-        or "segment information" in head
-        or "disaggregation of revenue" in head
-    ):
+    if bonus == 0.0 and figures and any(title in head for title in statements):
+        bonus = _FAMILY_WEIGHT * best
+    if terms & _SEGMENT_TERMS and any(title in head for title in _SEGMENT_HEADS):
         bonus = max(bonus, _SECTION_WEIGHT * best)
     if (
         terms & _CHANGE_TERMS
