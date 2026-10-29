@@ -1,0 +1,130 @@
+600076 Dify × PowerContext · 「Pit Wall 电台」本地实跑证据
+采集时间：2026-10-28 22:06-22:15 (UTC+8)
+采集方式：Dify 服务 API（/v1/chat-messages）真实调用 + Dify 自身 workflow_node_executions 表 + PowerContext API
+
+## 环境（全部本机实跑）
+
+| 组件 | 版本 / 部署 |
+|---|---|
+| Dify | 1.4.0 self-hosted docker compose（api/worker/web/nginx/db=postgres15/redis6/weaviate 1.19.0/sandbox 0.2.12/plugin_daemon 0.0.10-local/ssrf_proxy） |
+| 模型 provider | `langgenius/openai_api_compatible` 插件，endpoint 指向 `https://api.stepfun.com/v1` |
+| 生成模型 | `step-3.5-flash`（provider_models 实查记录：langgenius/openai_api_compatible/openai_api_compatible / step-3.5-flash / text-generation） |
+| PowerContext | 1.2.1.dev2（分支 2026-competition），SQLite + 本地 bge-small-zh-v1.5 512 维 embedding 服务（127.0.0.1:8010 的 OpenAI 兼容 shim，因为 StepFun 不提供 embedding 模型） |
+| 应用 | advanced-chat，DSL 0.1.5 导入后升级为 0.3.0，app_id `f628b8f7-0d7a-4e5d-a5ca-59c05ce9bcf9` |
+| 图结构 | 开始 → 召回记忆(HTTP /v1/context/prepare) → 工程师回应(LLM) → 写入记忆(HTTP /v1/sources/content) → 电台回答 |
+
+## 四次真实对话（均为 Service API 调用，返回 200）
+
+| # | conversation_id | query | workflow_run_id |
+|---|---|---|---|
+| 1 | 2f298747-d449-439f-824d-9abfbf531876 | 银石 T9 高速弯一直推头，我打算把前翼加两度，别劝我。 | e3728a10-0af2-4eb0-b511-fb9567907e3a |
+| 2 | 47f2996e-c659-429f-be94-4a780a5f7c0a | 今天想把前翼再加两度。 | efe91801-3b7f-4cc8-8e5c-038a8f12b6a9 |
+| 3 | 5c8d56a9-c03f-49f8-be10-bad6c8dbd302 | 第三场：后轮倾角那事儿还算数吗？这次要不要一起改前翼？ | c8ec101b-0d38-44be-8f5b-58776624487c |
+| 4 | 2d161cfd-9980-45ae-85e6-f22db5103d74 | 第四场：你说让我先跑十圈刷弯中推头数据，胎温那边要不要一起记？ | 08f916f4-18e5-489c-810d-5f52a668a2c4 |
+
+四次运行每个节点均为 succeeded（start / http_recall / llm / http_remember / answer 全部通过），
+召回节点 HTTP 200 且 PowerContext 返回 `status=ready`，写入节点 HTTP 202 accepted 并分配 journal position 2/3/5/6。
+
+## 跨会话记忆的实证链路
+
+第 1 场（LLM 输出，已由第 1 场自己的「写入记忆」节点写入 PowerContext）：
+> 上次银石加两度前翼直道掉2km/h的教训忘了？先加1.5度，差速器锁止率提3%，T9前200米提前收油带速进弯。
+
+PowerContext 抽取出的 memory entry（第 4 场召回原文，revision 4）：
+> 针对银石赛道 T9 高速弯推头问题的当前工程师建议：前翼加 1.5 度、差速器锁止率提升 3%、T9 前 200 米提前收油带速进弯
+
+第 4 场（全新会话，无 conversation_id 传入，靠同一 scope 召回）：
+> 上次你非自作主张加两度前翼，现在问要不要记胎温？废话，当然记。每圈进弯前报前胎胎温、胎压，再报弯中最高速度，我直接配对推头数据。现在跑的是哪条赛道？
+
+即：**上一场由 Dify 自己写进 PowerContext 的内容，在下一场新会话里被抽取成记忆条目并召回使用**，闭环成立。
+
+## 原始节点轨迹（Dify workflow_node_executions，逐节点导出）
+
+=== workflow_run 08f916f4-18e5-489c-810d-5f52a668a2c4 ===
+[start] 开始 -> succeeded (0.23s)
+  query=第四场：你说让我先跑十圈刷弯中推头数据，胎温那边要不要一起记？ | conversation=2d161cfd-9980-45ae-85e6-f22db5103d74
+
+[http_recall] 召回记忆 -> succeeded (0.97s)
+  http=200 pc_status=ready
+  --- recalled items ---
+BEGIN_POWERCONTEXT_PREPARED_CONTEXT_V1
+{"trust":"untrusted_history","items":[{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":4},"entry_id":"mem_ent_6b29f675f2704b58beb15e27f135de08","entry_version_id":"mem_ver_797afe43169e4b46a8f2a20a992dfa21"},"content":"待收集数据：银石赛道当前胎温、前轮胎压；需先完成 10 圈弯中推头数据采集再进一步调校","truncated":false},{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":4},"entry_id":"mem_ent_bd6425e577e648a6a903d3b04acb5d17","entry_version_id":"mem_ver_4d5b3c2e9dbe40cabb7c9fc02a461e61"},"content":"针对银石赛道 T9 高速弯推头问题的当前工程师建议：前翼加 1.5 度、差速器锁止率提升 3%、T9 前 200 米提前收油带速进弯","truncated":false},{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":4},"entry_id":"mem_ent_0608840e6dc842dfa418345ca89eec5b","entry_version_id":"mem_ver_c2fa1e16ec924773b03ad97b4ce04b92"},"content":"车手决定下一场比赛将前翼增加两度，以改善银石赛道高速弯推头问题","truncated":false},{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":4},"entry_id":"mem_ent_9581489ba613449f900272dfe699b2de","entry_version_id":"mem_ver_920945e68aec406eac51409f837fcc66"},"content":"车手坚持按自身判断调整设置，不希望被劝阻（","truncated":false}]}
+END_POWERCONTEXT_PREPARED_CONTEXT_V1
+
+[llm] 工程师回应 -> succeeded (6.50s)
+  answer=上次你非自作主张加两度前翼，现在问要不要记胎温？废话，当然记。每圈进弯前报前胎胎温、胎压，再报弯中最高速度，我直接配对推头数据。现在跑的是哪条赛道？
+
+[http_remember] 写入记忆 -> succeeded (0.14s)
+  http=202 body={"status": "accepted", "source": {"name": "content", "source_id": "dify-2d161cfd-9980-45ae-85e6-f22db5103d74-0"}, "position": 6}
+
+[answer] 电台回答 -> succeeded (0.04s)
+
+=== workflow_run c8ec101b-0d38-44be-8f5b-58776624487c ===
+[start] 开始 -> succeeded (0.31s)
+  query=第三场：后轮倾角那事儿还算数吗？这次要不要一起改前翼？ | conversation=5c8d56a9-c03f-49f8-be10-bad6c8dbd302
+
+[http_recall] 召回记忆 -> succeeded (0.89s)
+  http=200 pc_status=ready
+  --- recalled items ---
+BEGIN_POWERCONTEXT_PREPARED_CONTEXT_V1
+{"trust":"untrusted_history","items":[{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":3},"entry_id":"mem_ent_317701437e8245e69ac1f6de8c72c809","entry_version_id":"mem_ver_2822886dda5644a6b3cb1dc7af0d1206"},"content":"先前增加前翼角度的设置曾导致直道尾速下降 2 km/h","truncated":false},{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":3},"entry_id":"mem_ent_0608840e6dc842dfa418345ca89eec5b","entry_version_id":"mem_ver_c2fa1e16ec924773b03ad97b4ce04b92"},"content":"车手决定下一场比赛将前翼增加两度，以改善银石赛道高速弯推头问题","truncated":false},{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":3},"entry_id":"mem_ent_f3371a219dc84783abd6045162b570db","entry_version_id":"mem_ver_15dc2c1e150948f38dd549232f23bb51"},"content":"车手已将后轮倾角从 2.5 度调整至 3.2 度，解决了银石 T4 出弯甩尾问题。","truncated":false},{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":3},"entry_id":"mem_ent_bd6425e577e648a6a903d3b04acb5d17","entry_version_id":"mem_ver_4d5b3c2e9dbe40cabb7c9fc02a461e61"},"content":"针对银石赛道 T9 高速弯推头问题的当前工程师建议：前翼加 1.5 度、差速器锁止率提升 3%、T9 前 200 米提前收油带速进弯","truncated":false},{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":3},"entry_id":"mem_ent_9581489ba613449f900272dfe699b2de","entry_version_id":"mem_ver_920945e68aec406eac51409f837fcc66"},"content":"车手坚持按自身判断调整设置，不希望被劝阻（","truncated":false}]}
+END_POWERCONTEXT_PREPARED_CONTEXT_V1
+
+[llm] 工程师回应 -> succeeded (11.67s)
+  answer=上次银石你改后轮倾角到3.2度解决T4甩尾，那设置保留别动。之前加前翼掉2km/h直道速的旧账还没算，最多给你加1度前翼，差速器锁止提2%补出弯牵引力，同意就调。现在银石胎温多少？
+
+[http_remember] 写入记忆 -> succeeded (0.43s)
+  http=202 body={"status": "accepted", "source": {"name": "content", "source_id": "dify-5c8d56a9-c03f-49f8-be10-bad6c8dbd302-0"}, "position": 5}
+
+[answer] 电台回答 -> succeeded (0.03s)
+
+=== workflow_run efe91801-3b7f-4cc8-8e5c-038a8f12b6a9 ===
+[start] 开始 -> succeeded (0.22s)
+  query=今天想把前翼再加两度。 | conversation=47f2996e-c659-429f-be94-4a780a5f7c0a
+
+[http_recall] 召回记忆 -> succeeded (0.88s)
+  http=200 pc_status=ready
+  --- recalled items ---
+BEGIN_POWERCONTEXT_PREPARED_CONTEXT_V1
+{"trust":"untrusted_history","items":[{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":1},"entry_id":"mem_ent_0608840e6dc842dfa418345ca89eec5b","entry_version_id":"mem_ver_c2fa1e16ec924773b03ad97b4ce04b92"},"content":"车手决定下一场比赛将前翼增加两度，以改善银石赛道高速弯推头问题","truncated":false},{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":1},"entry_id":"mem_ent_317701437e8245e69ac1f6de8c72c809","entry_version_id":"mem_ver_2822886dda5644a6b3cb1dc7af0d1206"},"content":"先前增加前翼角度的设置曾导致直道尾速下降 2 km/h","truncated":false}]}
+END_POWERCONTEXT_PREPARED_CONTEXT_V1
+
+[llm] 工程师回应 -> succeeded (4.82s)
+  answer=银石加两度掉2km/h尾速的账还没算完呢，直道被超别喊我。先跑10圈刷弯中推头数据，别上来就调。当前跑哪条赛道？前轮胎压多少？
+
+[http_remember] 写入记忆 -> succeeded (0.16s)
+  http=202 body={"status": "accepted", "source": {"name": "content", "source_id": "dify-47f2996e-c659-429f-be94-4a780a5f7c0a-0"}, "position": 3}
+
+[answer] 电台回答 -> succeeded (0.01s)
+
+=== workflow_run e3728a10-0af2-4eb0-b511-fb9567907e3a ===
+[start] 开始 -> succeeded (0.68s)
+  query=银石 T9 高速弯一直推头，我打算把前翼加两度，别劝我。 | conversation=2f298747-d449-439f-824d-9abfbf531876
+
+[http_recall] 召回记忆 -> succeeded (1.46s)
+  http=200 pc_status=ready
+  --- recalled items ---
+BEGIN_POWERCONTEXT_PREPARED_CONTEXT_V1
+{"trust":"untrusted_history","items":[{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":1},"entry_id":"mem_ent_0608840e6dc842dfa418345ca89eec5b","entry_version_id":"mem_ver_c2fa1e16ec924773b03ad97b4ce04b92"},"content":"车手决定下一场比赛将前翼增加两度，以改善银石赛道高速弯推头问题","truncated":false},{"citation":{"memory_ref":{"family":"memory","artifact_id":"memory","revision":1},"entry_id":"mem_ent_317701437e8245e69ac1f6de8c72c809","entry_version_id":"mem_ver_2822886dda5644a6b3cb1dc7af0d1206"},"content":"先前增加前翼角度的设置曾导致直道尾速下降 2 km/h","truncated":false}]}
+END_POWERCONTEXT_PREPARED_CONTEXT_V1
+
+[llm] 工程师回应 -> succeeded (3.98s)
+  answer=上次银石加两度前翼直道掉2km/h的教训忘了？先加1.5度，差速器锁止率提3%，T9前200米提前收油带速进弯。现在银石赛道胎温多少？
+
+[http_remember] 写入记忆 -> succeeded (0.36s)
+  http=202 body={"status": "accepted", "source": {"name": "content", "source_id": "dify-2f298747-d449-439f-824d-9abfbf531876-0"}, "position": 2}
+
+[answer] 电台回答 -> succeeded (0.05s)
+
+## 已知限制与判题侧说明
+
+1. **Dify 1.4 的 HTTP 节点 json body 只能有一个 data item**，其值是一段 JSON 模板字符串（`core/workflow/nodes/http_request/executor.py` 里先 convert_template 再 json.loads）。仓库里的 DSL 已按此改写；后果是正文里的双引号会破坏 JSON，演示文案全部使用中文标点规避。更稳的写法是在 HTTP 节点前插入 code 节点用 json.dumps 生成 payload，本次未采用（保持 DSL 在 1.4 上零依赖可导入）。
+2. **写入正文用「；」代替换行**，原因同上（JSON 字符串里 `\n` 会被模板转义链吃掉）。
+3. **Docker 内访问宿主 PowerContext**：api/worker 需要 `extra_hosts: host.docker.internal:host-gateway`，**ssrf_proxy 也必须加**，否则 HTTP 节点经 squid 出站时 DNS 解析不到 host.docker.internal，报 `Reached maximum retries (0)`。
+4. **PowerContext 的 memory 抽取是后台异步的**（`RUNTIME_SCHEDULE_SECONDS=20`），写入 source 后要等抽取完成才能被下一场召回；抽取期间若模型调用抖动会记 `Artifact processing failed` 并自动重试，本次出现过几次瞬时失败，重启后同一批 source 全部抽取成功。
+5. 证据里的 `probe-1` source（后轮倾角 2.5→3.2 度）是我为验证抽取链路单独写入的对照 source，其记忆条目已在采集完成后 retire，不属于演示脚本内容。
+
+## PowerContext 侧状态实查
+
+- scope `scp_555p69h1nywyt14g7mgdaffq8e` 的 sources：`seed-1`（position 1，演示前写入的历史）、`dify-2f298747…-0`（2）、`dify-47f2996e…-0`（3）、`probe-1`（4，对照）、`dify-5c8d56a9…-0`（5）、`dify-2d161cfd…-0`（6）
+- memory artifact revision 从 1 递增到 4，entries 由 seed 抽取的 2 条扩展到 5 条（含 2 条由 Dify 写入的 source 抽取而来）

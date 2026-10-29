@@ -114,15 +114,9 @@ workflow:
             type: no-auth
           body:
             data:
-              - id: scope_id
+              - id: payload
                 type: text
-                value: '{{#env.SCOPE_ID#}}'
-              - id: query
-                type: text
-                value: '{{#sys.query#}}'
-              - id: max_bytes
-                type: number
-                value: 2000
+                value: '{"scope_id":"{{#env.SCOPE_ID#}}","query":"{{#sys.query#}}","max_bytes":2000}'
             type: json
           desc: 从 PowerContext 取与本轮问题相关的历史记忆
           headers: 'Content-Type:application/json'
@@ -159,11 +153,11 @@ workflow:
           desc: 扮演工程师，用记忆内容对车手翻旧账
           model:
             completion_params:
-              max_tokens: 512
+              max_tokens: 2048
               temperature: 0.8
             mode: chat
-            name: gpt-4o-mini
-            provider: openai
+            name: step-3.5-flash
+            provider: langgenius/openai_api_compatible/openai_api_compatible
           prompt_template:
             - role: system
               text: |
@@ -208,15 +202,9 @@ workflow:
             type: no-auth
           body:
             data:
-              - id: scope_id
+              - id: payload
                 type: text
-                value: '{{#env.SCOPE_ID#}}'
-              - id: source_id
-                type: text
-                value: 'dify-{{#sys.conversation_id#}}-{{#sys.dialogue_count#}}'
-              - id: content
-                type: text
-                value: "车手说：{{#sys.query#}}\n工程师回答：{{#llm.text#}}"
+                value: '{"scope_id":"{{#env.SCOPE_ID#}}","source_id":"dify-{{#sys.conversation_id#}}-{{#sys.dialogue_count#}}","content":"车手说：{{#sys.query#}}；工程师回答：{{#llm.text#}}"}'
             type: json
           desc: 把本轮对话写入 PowerContext，供下一轮/下一场召回
           headers: 'Content-Type:application/json'

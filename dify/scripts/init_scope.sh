@@ -8,7 +8,7 @@ TITLE="${1:-Pit Wall 电台}"
 
 scope_id=$(curl -sS -X POST "$BASE/v1/scopes" \
   -H 'content-type: application/json' \
-  -d "$(python -c 'import json,sys;print(json.dumps({"title":sys.argv[1],"summary":"车手与工程师的无线电台对话记忆：设定改动、承诺、借口与事故复盘"},ensure_ascii=False))' "$TITLE")" \
+  -d "$(python -c 'import json,sys;print(json.dumps({"title":sys.argv[1],"summary":"车手与工程师的无线电台对话记忆：设定改动、承诺、借口与事故复盘","idempotency_key":sys.argv[2]},ensure_ascii=False))' "$TITLE" "pitwall-scope-$(date +%Y%m%d%H%M%S)")" \
   | python -c 'import json,sys;d=json.load(sys.stdin);print(d.get("scope_id") or d.get("id") or "")')
 
 if [ -z "$scope_id" ]; then
